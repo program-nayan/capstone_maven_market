@@ -1,0 +1,17 @@
+project:
+  name: "maven_market"
+  catalog: "maven_market_uc"
+  environment: "dev"
+
+schemas:
+  bronze: "bronze"
+  silver: "silver"
+  gold: "gold"
+  audit: "audit"
+
+tables:
+  audit_logs: "audit_logs"
+
+paths:
+  checkpoint_root: "/Volumes/maven_market_uc/bronze/checkpoints"
+  raw_landing: "/Volumes/maven_market_uc/bronze/landing"
