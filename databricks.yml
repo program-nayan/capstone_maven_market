@@ -1,0 +1,105 @@
+bundle:
+  name: maven_market_lakehouse
+
+# Define bundle-level variables for dynamic deployment across environments
+variables:
+  catalog_name:
+    description: "Target Unity Catalog Metastore name"
+    default: "maven_market_uc"
+  env:
+    description: "Deployment target environment name"
+    default: "dev"
+
+# Configuration for deployment targets (Dev vs Prod)
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      # Update with your Azure Databricks workspace URL
+      host: https://adb-dev-workspace.azuredatabricks.net
+      root_path: /Users/${workspace.current_user.short_name}/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      env: dev
+
+  prod:
+    mode: production
+    workspace:
+      host: https://adb-prod-workspace.azuredatabricks.net
+      root_path: /Shared/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      env: prod
+    permissions:
+      - level: CAN_MANAGE
+        group_name: "admins"
+
+# Define workspace resource deployments (DLT Pipelines & Orchestration Workflows)
+resources:
+  # 1. Delta Live Tables Medallion Pipeline
+  pipelines:
+    dlt_medallion_pipeline:
+      name: ${bundle.name}_dlt_pipeline_${var.env}
+      catalog: ${var.catalog_name}
+      target: ${var.env}
+      continuous: false
+      development: true
+      channel: CURRENT
+      edition: ADVANCED
+      photon: true
+      libraries:
+        - notebook:
+            path: ./src/dlt/bronze.py
+        - notebook:
+            path: ./src/dlt/silver.py
+        - notebook:
+            path: ./src/dlt/gold.py
+      configuration:
+        bundle.environment: ${var.env}
+        catalog_name: ${var.catalog_name}
+
+  # 2. Daily Workflow Orchestration Job
+  jobs:
+    lakehouse_daily_workflow:
+      name: ${bundle.name}_daily_job_${var.env}
+      
+      schedule:
+        quartz_cron_expression: "0 0 2 * * ?" # Runs daily at 2:00 AM UTC
+        timezone_id: UTC
+        pause_status: UNPAUSED
+
+      tasks:
+        # Task 1: Trigger DLT Pipeline Transformation
+        - task_key: run_medallion_dlt
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.dlt_medallion_pipeline.id}
+
+        # Task 2: Audit & Telemetry Log Aggregation
+        - task_key: run_telemetry_audit
+          depends_on:
+            - task_key: run_medallion_dlt
+          spark_python_task:
+            python_file: ./src/telemetry/logger.py
+          job_cluster_key: audit_job_cluster
+
+      job_clusters:
+        - job_cluster_key: audit_job_cluster
+          new_cluster:
+            spark_version: 13.3.x-scala2.12
+            node_type_id: Standard_D4s_v5
+            num_workers: 1
+            spark_conf:
+              spark.databricks.delta.preview.enabled: "true"
+            custom_tags:
+              project: maven_market
+              environment: ${var.env}
+              owner: telemetry_team
+
+# Code sync configuration (files excluded from deployment)
+sync:
+  exclude:
+    - .git/
+    - .gitignore
+    - .venv/
+    - __pycache__/
+    - .pytest_cache/
+    - tests/
