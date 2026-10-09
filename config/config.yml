@@ -1,81 +1,44 @@
-# ==============================================================================
-# Maven Market Lakehouse - Master Configuration File
-# 100% Config-Driven Modularity for Dev / Test / Prod Target Environments
-# ==============================================================================
+environment: "dev"
+catalog: "maven_market_uc"
+secret_scope: "scope-maven-market"
 
-catalog:
-  name: "maven_market_uc"
+storage:
+  base_path: "abfss://root@stmavenmarket.dfs.core.windows.net"
+  checkpoint_base: "abfss://root@stmavenmarket.dfs.core.windows.net/_checkpoints"
+
+sources:
+  pos_csv:
+    transactions: "/raw/transactions/"
+    stores: "/raw/stores/"
+    regions: "/raw/regions/"
+    calendar: "/raw/calendar/"
+    returns: "/raw/returns/"
+  mongodb:
+    database: "maven_market_db"
+    uri_secret_key: "mongodb-connection-uri"
+    collections:
+      customers: "customers"
+      products: "products"
+  kafka:
+    bootstrap_secret_key: "kafka-bootstrap-servers"
+    api_key_secret_key: "kafka-api-key"
+    api_secret_secret_key: "kafka-api-secret"
+    topics:
+      orders: "orders-stream"
+      inventory: "inventory-stream"
+
+targets:
   schemas:
     bronze: "bronze"
     silver: "silver"
     gold: "gold"
-    audit: "audit"
-
-storage:
-  base_path: "/mnt/maven_market"
-  bronze_path: "/mnt/maven_market/bronze"
-  silver_path: "/mnt/maven_market/silver"
-  gold_path: "/mnt/maven_market/gold"
-  checkpoint_path: "/mnt/maven_market/checkpoints"
-
-secrets:
-  scope: "maven-secrets"
-
-sources:
-  transactions_raw: "/mnt/maven_market/bronze/raw/transactions/*.csv"
-  customers_raw: "/mnt/maven_market/bronze/raw/customers/*.csv"
-  stores_raw: "/mnt/maven_market/bronze/raw/stores/*.csv"
-  regions_raw: "/mnt/maven_market/bronze/raw/regions/*.csv"
-  calendar_raw: "/mnt/maven_market/bronze/raw/calendar/*.csv"
-  returns_raw: "/mnt/maven_market/bronze/raw/returns/*.csv"
-
-mongodb:
-  uri_key: "mongodb-uri"
-  database: "product_catalog"
-  collection: "products"
-
-kafka:
-  bootstrap_servers_key: "kafka-bootstrap-server"
-  api_key_name: "kafka-api-key"
-  api_secret_name: "kafka-api-secret"
-  topics:
-    orders: "orders-stream"
-    inventory: "inventory-stream"
-
-tables:
-  # Bronze Layer Tables
-  bronze_transactions: "bronze.transactions"
-  bronze_customers: "bronze.customers"
-  bronze_stores: "bronze.stores"
-  bronze_regions: "bronze.regions"
-  bronze_calendar: "bronze.calendar"
-  bronze_returns: "bronze.returns"
-  bronze_mongodb_products: "bronze.mongodb_products"
-  bronze_kafka_orders: "bronze.kafka_orders"
-  bronze_kafka_inventory: "bronze.kafka_inventory"
-
-  # Silver Layer Tables
-  silver_orders: "silver.orders_cleansed"
-  silver_transactions: "silver.transactions_cleansed"
-  silver_customers_scd: "silver.dim_customers_scd"
-  silver_stores: "silver.dim_stores_cleansed"
-  silver_products: "silver.dim_products_cleansed"
-  silver_returns: "silver.returns_cleansed"
-
-  # Gold Layer Tables
-  gold_fact_sales: "gold.fact_sales"
-  gold_fact_inventory: "gold.fact_inventory"
-  gold_dim_customers: "gold.dim_customers"
-  gold_dim_products: "gold.dim_products"
-  gold_dim_stores: "gold.dim_stores"
-  gold_dim_calendar: "gold.dim_calendar"
-
-  # Audit & Observability Tables
-  audit_logs: "audit.audit_logs"
-  user_region_mapping: "audit.user_region_mapping"
 
 expectations:
-  valid_quantity: "quantity > 0"
-  valid_price: "unit_price > 0"
-  valid_customer_id: "customer_id IS NOT NULL"
-  valid_product_id: "product_id IS NOT NULL"
+  stores:
+    valid_store_id: "store_id IS NOT NULL"
+  products:
+    valid_product_id: "product_id IS NOT NULL"
+    valid_price: "product_retail_price > 0"
+  orders:
+    valid_quantity: "quantity > 0"
+    valid_customer_id: "customer_id IS NOT NULL"
