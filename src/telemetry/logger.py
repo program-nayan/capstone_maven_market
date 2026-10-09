@@ -28,7 +28,7 @@ class TelemetryLogger:
         self.environment = environment
         self.full_table_path = f"{catalog}.{schema}.{table}"
 
-    def _get_utc_now((self) -> datetime:
+    def _get_utc_now(self) -> datetime:
         return datetime.now(timezone.utc)
 
     def log_event(
