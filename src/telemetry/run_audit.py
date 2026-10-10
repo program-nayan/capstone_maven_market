@@ -3,7 +3,14 @@ from pathlib import Path
 import sys
 from typing import Optional, Sequence
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+# Safely resolve project root across both CLI and Databricks execution wrappers
+if "__file__" in globals():
+    PROJECT_ROOT = Path(__file__).resolve().parents[2]
+else:
+    # Fallback when executed inside Databricks kernel wrappers
+    cwd = Path(os.getcwd()).resolve()
+    PROJECT_ROOT = cwd.parents[1] if cwd.name == "telemetry" else cwd
+    
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
