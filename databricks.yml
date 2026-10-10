@@ -72,7 +72,7 @@ resources:
       configuration:
         bundle.environment: ${var.env}
         catalog_name: ${var.catalog_name}
-        spark.databricks.delta.streaming.ignoreChanges.enabled: "true"
+        spark.sql.streaming.ignoreChanges: "true"
 
   # 2. Daily Workflow Orchestration Job (Serverless)
   jobs:
