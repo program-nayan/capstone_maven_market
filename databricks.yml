@@ -3,12 +3,15 @@ bundle:
 
 # Define bundle-level variables for dynamic deployment across environments
 variables:
-  catalog_name:
+  catalog_name: 
     description: "Target Unity Catalog Metastore name"
     default: "maven_market_uc"
   env:
     description: "Deployment target environment name"
     default: "dev"
+  secret_scope:
+    description: "Databricks secret scope for storing sensitive information"
+    default: "scope-maven-market"
 
 # Configuration for deployment targets (Dev vs Prod)
 targets:
@@ -45,8 +48,12 @@ resources:
       development: true
       channel: CURRENT
       edition: ADVANCED
-      photon: true
+      photon: false
       libraries:
+        - pypi:
+            package: "pymongo"
+        - pypi:
+            package: "pandas"
         - notebook:
             path: ./src/dlt/01_bronze.py
         - notebook:
@@ -57,15 +64,27 @@ resources:
         bundle.environment: ${var.env}
         catalog_name: ${var.catalog_name}
 
-  # 2. Daily Workflow Orchestration Job
+  # 2. Daily Workflow Orchestration Job (Serverless)
   jobs:
     lakehouse_daily_workflow:
       name: ${bundle.name}_daily_job_${var.env}
       
+      # Top-level resource tags (moved from cluster custom_tags)
+      tags:
+        project: maven_market
+        environment: ${var.env}
+        owner: telemetry_team
+
       schedule:
         quartz_cron_expression: "0 0 2 * * ?" # Runs daily at 2:00 AM UTC
         timezone_id: UTC
         pause_status: UNPAUSED
+
+      # Environment definition required for serverless Python script execution
+      environments:
+        - environment_key: default
+          spec:
+            client: "1"
 
       tasks:
         # Task 1: Trigger DLT Pipeline Transformation
@@ -73,26 +92,13 @@ resources:
           pipeline_task:
             pipeline_id: ${resources.pipelines.dlt_medallion_pipeline.id}
 
-        # Task 2: Audit & Telemetry Log Aggregation
+        # Task 2: Audit & Telemetry Log Aggregation (Serverless)
         - task_key: run_telemetry_audit
           depends_on:
             - task_key: run_medallion_dlt
+          environment_key: default
           spark_python_task:
             python_file: ./src/telemetry/logger.py
-          job_cluster_key: audit_job_cluster
-
-      job_clusters:
-        - job_cluster_key: audit_job_cluster
-          new_cluster:
-            spark_version: 13.3.x-scala2.12
-            node_type_id: Standard_D4s_v5
-            num_workers: 1
-            spark_conf:
-              spark.databricks.delta.preview.enabled: "true"
-            custom_tags:
-              project: maven_market
-              environment: ${var.env}
-              owner: telemetry_team
 
 # Code sync configuration (files excluded from deployment)
 sync:
