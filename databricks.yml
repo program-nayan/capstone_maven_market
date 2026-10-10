@@ -88,11 +88,6 @@ resources:
         environment: ${var.env}
         owner: telemetry_team
 
-      schedule:
-        quartz_cron_expression: "0 0 2 * * ?" # Runs daily at 2:00 AM UTC
-        timezone_id: UTC
-        pause_status: UNPAUSED
-
       # Environment definition required for serverless Python script execution
       environments:
         - environment_key: default
