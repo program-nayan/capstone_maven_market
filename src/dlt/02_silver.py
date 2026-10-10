@@ -1,3 +1,4 @@
+# Databricks notebook source
 import dlt
 from pyspark.sql.functions import col, from_json, schema_of_json, current_timestamp, to_date
 from src.utils.dlt_loader import load_config
