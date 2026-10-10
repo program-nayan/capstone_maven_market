@@ -150,12 +150,7 @@ def silver_inventory():
     comment="Streaming view on Bronze customers with overwrite tolerance"
 )
 def v_bronze_mongodb_customers():
-    return (
-        spark.readStream
-        .option("skipChangeCommits", "true")
-        .option("ignoreChanges", "true")
-        .table(f"{bronze_schema}.bronze_mongodb_customers")
-    )
+    return dlt.read_stream(f"{bronze_schema}.bronze_mongodb_customers")
 
 dlt.create_streaming_table(
     name=f"{silver_schema}.silver_dim_customers_scd",
@@ -180,13 +175,8 @@ dlt.apply_changes(
     name="v_bronze_mongodb_products",
     comment="Streaming view on Bronze products with overwrite tolerance"
 )
-def v_bronze_mongodb_customers():
-    return (
-        spark.readStream
-        .option("skipChangeCommits", "true")
-        .option("ignoreChanges", "true")
-        .table(f"{bronze_schema}.bronze_mongodb_products")
-    )
+def v_bronze_mongodb_products():
+    return dlt.read_stream(f"{bronze_schema}.bronze_mongodb_products")
 
 dlt.create_streaming_table(
     name=f"{silver_schema}.silver_dim_products_scd",
