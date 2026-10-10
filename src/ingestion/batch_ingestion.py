@@ -1,9 +1,11 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import current_timestamp, col
 from src.utils.config_loader import ConfigLoader
+from src.telemetry.decorators import log_execution
 
+
+@log_execution(pipeline_name="bronze_batch_ingestion", step_name="auto_loader_csv_ingest")
 def run_batch_csv_ingestion(spark: SparkSession, config: ConfigLoader):
-    # Removed customers_path since customers are now ingested from MongoDB
     datasets = {
         "transactions_path": "transactions",
         "stores_path": "stores",
@@ -46,7 +48,8 @@ def run_batch_csv_ingestion(spark: SparkSession, config: ConfigLoader):
         )
 
         query.awaitTermination()
-        print(f" Successfully ingested {table_name} into {target_table}\n")
+        print(f"Successfully ingested {table_name} into {target_table}\n")
+
 
 if __name__ == "__main__":
     spark_session = SparkSession.builder.getOrCreate()
