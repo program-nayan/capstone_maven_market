@@ -1,4 +1,15 @@
 # Databricks notebook source
+import sys
+import os
+
+# Dynamically locate project root directory (two levels up from src/dlt) and add to sys.path
+current_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else os.getcwd()
+repo_root = os.path.abspath(os.path.join(current_dir, "../../"))
+if repo_root not in sys.path:
+    sys.path.append(repo_root)
+
+# COMMAND ----------
+
 import dlt
 import json
 import pymongo
