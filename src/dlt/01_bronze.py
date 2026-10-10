@@ -105,7 +105,7 @@ for entity_name, collection_name in mongo_cfg["collections"].items():
                 .withColumn("_source_system", lit(f"MongoDB_Atlas.{coll_name}"))
             )
 
-    create_mongo_dlt_table(collection_name, dlt_tbl_name)
+    create_mongo_dlt_table(collection_name, full_target_name)
 
 # ------------------------------------------------------------------
 # 3. Dynamic Kafka Streams Ingestion
