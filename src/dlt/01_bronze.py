@@ -74,7 +74,10 @@ for entity_name, collection_name in mongo_cfg["collections"].items():
         @dlt.table(
             name=target_table,
             comment=f"Raw MongoDB Atlas direct ingestion for {coll_name} via PyMongo",
-            table_properties={"quality": "bronze"}
+            table_properties={
+                "quality": "bronze",
+                "delta.enableChangeDataFeed": "true"
+            }
         )
         def ingest_mongo():
             # 1. Fetch raw documents from MongoDB Atlas via PyMongo
