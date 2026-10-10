@@ -13,6 +13,7 @@ if repo_root not in sys.path:
 import dlt
 import json
 import pymongo
+import time
 import pandas as pd
 from pyspark.sql.functions import current_timestamp, col, input_file_name, lit 
 from src.utils.dlt_loader import load_config
@@ -69,57 +70,51 @@ mongo_uri = dbutils.secrets.get(scope=secret_scope, key=mongo_secret_key).strip(
 for entity_name, collection_name in mongo_cfg["collections"].items():
     dlt_tbl_name = f"bronze_mongodb_{entity_name}"
     full_target_name = f"{bronze_schema}.{dlt_tbl_name}"
+    raw_landing_path = f"{base_path}/raw/mongodb/{collection_name}"
 
-    # 1. Register target as a Streaming Table to maintain append history
-    dlt.create_streaming_table(
-        name=full_target_name,
-        comment=f"Raw MongoDB Atlas streaming append ingestion for {collection_name} via PyMongo",
-        table_properties={"quality": "bronze"}
-    )
-    
-    def create_mongo_dlt_table(coll_name, target_table):
-        # @dlt.table(
-        #     name=target_table,
-        #     comment=f"Raw MongoDB Atlas direct ingestion for {coll_name} via PyMongo",
-        #     table_properties={
-        #         "quality": "bronze",
-        #         "delta.enableChangeDataFeed": "true"
-        #     }
-        # )
-        @dlt.append_flow(
-            target=target_table,
-            name=f"flow_mongo_{entity_key}"
+    def create_mongo_autoloader_table(entity_key, coll_name, tbl, landing_path):
+        @dlt.table(
+            name=tbl,
+            comment=f"Raw streaming Auto Loader ingestion for MongoDB collection '{coll_name}'",
+            table_properties={"quality": "bronze"}
         )
         def ingest_mongo():
-            # 1. Fetch raw documents from MongoDB Atlas via PyMongo
+            # 1. Fetch snapshot from MongoDB Atlas via PyMongo
             client = pymongo.MongoClient(mongo_uri)
             db = client[db_name]
             collection = db[coll_name]
-            
             raw_docs = list(collection.find())
-            print(raw_docs)
 
-            if not raw_docs:
-                # Return empty DataFrame with dummy schema if collection is empty
-                pass
+            # 2. Save snapshot JSON payload to landing storage
+            if raw_docs:
+                cleaned_docs = [json.loads(json.dumps(doc, default=str)) for doc in raw_docs]
+                
+                # Standardize primary key column name
+                target_id_col = "customer_id" if entity_key == "customers" else "product_id"
+                for doc in cleaned_docs:
+                    if "id" in doc:
+                        doc[target_id_col] = doc.pop("id")
+                    elif "_id" in doc:
+                        doc[target_id_col] = doc.pop("_id")
 
-            # 2. Convert BSON objects into standard JSON strings
-            cleaned_docs = [json.loads(json.dumps(doc, default=str)) for doc in raw_docs]
+                batch_ts = int(time.time())
+                file_path = f"{landing_path}/snapshot_{batch_ts}.json"
+                dbutils.fs.put(file_path, json.dumps(cleaned_docs), overwrite=True)
 
-            # 3. Convert to Pandas DataFrame first to unify numeric types
-            df_pd = pd.DataFrame(cleaned_docs)
-
-            # 4. Convert Pandas DataFrame to PySpark DataFrame
-            df_mongo = spark.createDataFrame(df_pd)
-
-            # 5. Enrich metadata and return DataFrame (DLT handles saving to Unity Catalog)
+            # 3. Read landing files using Auto Loader (returns a true Streaming DataFrame)
             return (
-                df_mongo
+                spark.readStream
+                .format("cloudFiles")
+                .option("cloudFiles.format", "json")
+                .option("cloudFiles.inferColumnTypes", "true")
+                .load(landing_path)
                 .withColumn("_ingested_at", current_timestamp())
                 .withColumn("_source_system", lit(f"MongoDB_Atlas.{coll_name}"))
             )
 
-    create_mongo_dlt_table(collection_name, full_target_name)
+        return ingest_mongo
+    
+    create_mongo_autoloader_table(entity_name, collection_name, full_target_name, raw_landing_path)
 
 # ------------------------------------------------------------------
 # 3. Dynamic Kafka Streams Ingestion
