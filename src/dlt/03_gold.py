@@ -1,3 +1,4 @@
+# Databricks notebook source
 import dlt
 from pyspark.sql.functions import col, sum as _sum, count, avg, max as _max, to_date
 from src.utils.dlt_loader import load_config
