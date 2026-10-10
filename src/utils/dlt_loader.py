@@ -54,6 +54,16 @@ def load_config(config_path: str = None) -> dict:
     with open(resolved_path, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
+    runtime_environment = spark.conf.get(
+        "bundle.environment",
+        os.getenv("DATABRICKS_ENV", config.get("environment", "dev"))
+    )
+    runtime_catalog = spark.conf.get("catalog_name", config.get("catalog"))
+    if runtime_environment:
+        config["environment"] = runtime_environment
+    if runtime_catalog:
+        config["catalog"] = runtime_catalog
+
     return config
 
 

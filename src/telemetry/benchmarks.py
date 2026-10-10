@@ -10,9 +10,18 @@ class PerformanceBenchmark:
     and cluster warm-up latency across Silver and Gold Delta layers.
     """
 
-    def __init__(self, spark: SparkSession, environment: str = "dev"):
+    def __init__(
+        self,
+        spark: SparkSession,
+        environment: str = "dev",
+        catalog: str = "maven_market_uc"
+    ):
         self.spark = spark
-        self.logger = TelemetryLogger(spark=spark, environment=environment)
+        self.logger = TelemetryLogger(
+            spark=spark,
+            catalog=catalog,
+            environment=environment
+        )
 
     def measure_query_performance(
         self,

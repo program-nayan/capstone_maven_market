@@ -1,6 +1,6 @@
-import sys
 import traceback
 from datetime import datetime, timezone
+import json
 from typing import Optional, Dict, Any
 from pyspark.sql import SparkSession
 from pyspark.sql.types import (
@@ -28,6 +28,30 @@ class TelemetryLogger:
         self.environment = environment
         self.full_table_path = f"{catalog}.{schema}.{table}"
 
+    def ensure_audit_table(self) -> None:
+        """Create the audit namespace and table when they do not exist."""
+        quoted_catalog = f"`{self.catalog.replace('`', '``')}`"
+        quoted_schema = f"`{self.schema.replace('`', '``')}`"
+        quoted_table = f"`{self.table.replace('`', '``')}`"
+
+        self.spark.sql(f"CREATE SCHEMA IF NOT EXISTS {quoted_catalog}.{quoted_schema}")
+        self.spark.sql(
+            f"""
+            CREATE TABLE IF NOT EXISTS {quoted_catalog}.{quoted_schema}.{quoted_table} (
+                timestamp TIMESTAMP NOT NULL,
+                environment STRING NOT NULL,
+                pipeline_name STRING NOT NULL,
+                step_name STRING NOT NULL,
+                status STRING NOT NULL,
+                records_processed BIGINT NOT NULL,
+                execution_time_seconds DOUBLE,
+                error_message STRING,
+                metadata STRING
+            )
+            USING DELTA
+            """
+        )
+
     def _get_utc_now(self) -> datetime:
         return datetime.now(timezone.utc)
 
@@ -53,7 +77,7 @@ class TelemetryLogger:
             int(records_processed),
             float(execution_time_seconds) if execution_time_seconds is not None else 0.0,
             error_message if error_message else "",
-            str(additional_metadata) if additional_metadata else "{}"
+            json.dumps(additional_metadata or {}, default=str, sort_keys=True)
         )]
 
         schema = StructType([
@@ -68,17 +92,9 @@ class TelemetryLogger:
             StructField("metadata", StringType(), True)
         ])
 
-        try:
-            df_log = self.spark.createDataFrame(log_entry, schema=schema)
-            df_log.write.format("delta").mode("append").saveAsTable(self.full_table_path)
-            
-            print(f"[{now.isoformat()}] [{status.upper()}] {pipeline_name}.{step_name} | "
-                  f"Records: {records_processed:,} | Duration: {execution_time_seconds or 0:.2f}s")
-            
-        except Exception as e:
-            # Fallback printer if Delta table is locked or unreachable
-            print(f"CRITICAL: Failed writing log to {self.full_table_path}: {str(e)}", file=sys.stderr)
-            print(f"FALLBACK LOG: [{now.isoformat()}] [{status}] {pipeline_name}.{step_name} - Error: {error_message}", file=sys.stderr)
+        self.ensure_audit_table()
+        df_log = self.spark.createDataFrame(log_entry, schema=schema)
+        df_log.write.format("delta").mode("append").saveAsTable(self.full_table_path)
 
     def log_exception(
         self,

@@ -1,5 +1,7 @@
 import pytest
+from unittest.mock import MagicMock, patch
 from src.utils.config_loader import ConfigLoader
+from src.utils.dlt_loader import load_config
 
 
 def test_config_loader_master_yaml_catalog_and_schemas():
@@ -39,3 +41,19 @@ def test_config_loader_invalid_schema_key():
     loader = ConfigLoader(env="dev")
     with pytest.raises(KeyError):
         loader.get_schema("invalid_layer_name")
+
+
+def test_dlt_loader_uses_bundle_environment_and_catalog():
+    mock_spark = MagicMock()
+    values = {
+        "bundle.environment": "prod",
+        "catalog_name": "prod_catalog"
+    }
+    mock_spark.conf.get.side_effect = lambda key, default=None: values.get(key, default)
+
+    with patch("src.utils.dlt_loader.SparkSession") as mock_session:
+        mock_session.builder.getOrCreate.return_value = mock_spark
+        config = load_config(config_path="config/config.yml")
+
+    assert config["environment"] == "prod"
+    assert config["catalog"] == "prod_catalog"

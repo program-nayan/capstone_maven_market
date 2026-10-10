@@ -12,6 +12,9 @@ variables:
   secret_scope:
     description: "Databricks secret scope for storing sensitive information"
     default: "scope-maven-market"
+  prod_workspace_host:
+    description: "Production Databricks workspace URL; required when deploying the prod target"
+    default: "https://adb-7405609703883364.4.azuredatabricks.net"
 
 # Configuration for deployment targets (Dev vs Prod)
 targets:
@@ -24,11 +27,15 @@ targets:
       root_path: /Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
     variables:
       env: dev
+    resources:
+      pipelines:
+        dlt_medallion_pipeline:
+          development: true
 
   prod:
     mode: production
     workspace:
-      host: https://adb-prod-workspace.azuredatabricks.net
+      host: ${var.prod_workspace_host}
       root_path: /Shared/.bundle/${bundle.name}/${bundle.target}
     variables:
       env: prod
@@ -45,15 +52,17 @@ resources:
       catalog: ${var.catalog_name}
       target: ${var.env}
       continuous: false
-      development: true
+      development: false
+      serverless: true
       channel: CURRENT
       edition: ADVANCED
       photon: false
+      environment:
+        dependencies:
+          - "pymongo>=4.5.0"
+          - "pandas>=2.0.0"
+          - "PyYAML>=6.0.1"
       libraries:
-        - pypi:
-            package: "pymongo"
-        - pypi:
-            package: "pandas"
         - notebook:
             path: ./src/dlt/01_bronze.py
         - notebook:
@@ -85,6 +94,8 @@ resources:
         - environment_key: default
           spec:
             client: "1"
+            dependencies:
+              - "PyYAML>=6.0.1"
 
       tasks:
         # Task 1: Trigger DLT Pipeline Transformation
@@ -94,11 +105,19 @@ resources:
 
         # Task 2: Audit & Telemetry Log Aggregation (Serverless)
         - task_key: run_telemetry_audit
+          run_if: ALL_DONE
           depends_on:
             - task_key: run_medallion_dlt
           environment_key: default
           spark_python_task:
-            python_file: ./src/telemetry/logger.py
+            python_file: ./src/telemetry/run_audit.py
+            parameters:
+              - "--pipeline-id"
+              - ${resources.pipelines.dlt_medallion_pipeline.id}
+              - "--catalog"
+              - ${var.catalog_name}
+              - "--environment"
+              - ${var.env}
 
 # Code sync configuration (files excluded from deployment)
 sync:

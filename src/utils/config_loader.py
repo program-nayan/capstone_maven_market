@@ -10,8 +10,14 @@ class ConfigLoader:
     and Medallion layer table generation.
     """
 
-    def __init__(self, config_path: Optional[str] = None, env: Optional[str] = None):
+    def __init__(
+        self,
+        config_path: Optional[str] = None,
+        env: Optional[str] = None,
+        catalog: Optional[str] = None
+    ):
         self.env = env or os.getenv("DATABRICKS_ENV", "dev")
+        self._catalog_override = catalog
         
         if config_path is None:
             base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -39,6 +45,8 @@ class ConfigLoader:
 
     def get_catalog(self) -> str:
         """Returns target Unity Catalog name."""
+        if self._catalog_override:
+            return self._catalog_override
         cat_val = self._config_data.get("catalog", "maven_market_uc")
         if isinstance(cat_val, dict):
             return cat_val.get("name", "maven_market_uc")

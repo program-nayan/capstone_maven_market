@@ -2,7 +2,6 @@
 import dlt
 from pyspark.sql.functions import col, sum as _sum, count, avg, max as _max, to_date
 from src.utils.dlt_loader import load_config
-from src.telemetry.logger import TelemetryLogger
 
 # Load runtime parameters
 cfg = load_config()
@@ -10,8 +9,6 @@ catalog = cfg["catalog"]
 bronze_schema = cfg["targets"]["schemas"]["bronze"]
 silver_schema = cfg["targets"]["schemas"]["silver"]
 gold_schema = cfg["targets"]["schemas"]["gold"]
-
-logger = TelemetryLogger(spark=spark, catalog=catalog, environment=cfg.get("environment", "dev"))
 
 # ==================================================================
 # FACT TABLES

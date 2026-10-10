@@ -1,0 +1,1 @@
+"""Maven Market application package."""

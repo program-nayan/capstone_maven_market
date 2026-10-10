@@ -2,7 +2,6 @@
 import dlt
 from pyspark.sql.functions import col, from_json, schema_of_json, current_timestamp, to_date
 from src.utils.dlt_loader import load_config
-from src.telemetry.logger import TelemetryLogger
 
 # Load runtime parameters
 cfg = load_config()
@@ -10,8 +9,6 @@ catalog = cfg["catalog"]
 bronze_schema = cfg["targets"]["schemas"]["bronze"]
 silver_schema = cfg["targets"]["schemas"]["silver"]
 expectations = cfg["expectations"]
-
-logger = TelemetryLogger(spark=spark, catalog=catalog, environment=cfg.get("environment", "dev"))
 
 # ------------------------------------------------------------------
 # 1. Cleansed Store Master Data
@@ -196,4 +193,3 @@ dlt.apply_changes(
         "store_phone"
     ]
 )
-

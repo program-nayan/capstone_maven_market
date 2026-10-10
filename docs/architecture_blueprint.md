@@ -29,9 +29,11 @@ flowchart TD
     end
 
     subgraph Observability["Telemetry & Audit Framework"]
-        LOG["src/telemetry/logger.py\n(@log_execution Decorator)"]
+        CAPTURE["src/telemetry/run_audit.py\n(DLT event-log capture)"]
+        LOG["src/telemetry/logger.py\n(Central structured logger)"]
         TBL["maven_market_uc.audit.audit_logs"]
-        LOG -->|Append Run Metadata| TBL
+        CAPTURE --> LOG
+        LOG -->|Append run and event metadata| TBL
     end
 
     subgraph Consumption["Analytics & SQL Dashboards"]
@@ -48,6 +50,19 @@ flowchart TD
     Gold Layer --> Consumption
     Lakeflow Designer --> Gold Layer
 ```
+
+The daily workflow runs `run_telemetry_audit` after the DLT task with `ALL_DONE`,
+so DLT events are captured even when the pipeline task fails. The task receives
+the deployed pipeline ID, catalog, and environment from the bundle. The logger
+creates the audit schema and Delta table when needed; audit-write failures are
+raised so the task cannot report successful persistence when it did not occur.
+Captured DLT events are incrementally read and deduplicated before appending.
+The audit views are refreshed by the same task.
+
+The production workspace URL has an empty default intentionally; set
+`BUNDLE_VAR_prod_workspace_host` before validating or deploying the `prod`
+target. Configure it to the actual workspace URL in the deployment environment
+rather than storing a workspace-specific endpoint in this file.
 
 ## 2. Telemetry Schema & Security Integration Matrix
 
