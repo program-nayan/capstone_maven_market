@@ -6,6 +6,7 @@ import pandas as pd
 from pyspark.sql.functions import current_timestamp, col, input_file_name, lit 
 from src.utils.dlt_loader import load_config
 from databricks.sdk.runtime import dbutils
+from src.telemetry.logger import TelemetryLogger
 
 # Load runtime parameters
 cfg = load_config()
@@ -13,6 +14,9 @@ base_path = cfg["storage"]["base_path"]
 secret_scope = cfg["secret_scope"]
 catalog = cfg["catalog"]
 bronze_schema = cfg["targets"]["schemas"]["bronze"]
+
+# Initialize Telemetry Logger
+logger = TelemetryLogger(spark=spark, catalog=catalog, environment=cfg.get("environment", "dev"))
 
 # ------------------------------------------------------------------
 # 1. POS CSV Auto Loader Stream Ingestion

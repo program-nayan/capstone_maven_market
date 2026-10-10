@@ -1,37 +1,51 @@
 import time
 import json
 import random
+import pymongo
 from datetime import datetime, timedelta
 from confluent_kafka import Producer
 from pyspark.sql import SparkSession
 from databricks.sdk.runtime import dbutils
 from src.utils.config_loader import ConfigLoader
 
-def load_reference_dimension_keys(spark: SparkSession, config: ConfigLoader):
-    """
-    Fetches valid Store IDs, Customer IDs, and Product (ID, Price) pairs 
-    from the ingested Bronze layer tables to guarantee referential integrity.
-    """
-    print("Fetching reference keys from Unity Catalog Bronze tables...")
+def load_reference_dimension_keys_pyspark(spark: SparkSession, config: ConfigLoader, secret_scope: str = "scope-maven-market"):
+    base_storage_path = config._config["storage"]["base_path"]
     
-    stores_table = config.get_full_table_name("bronze", "stores")
-    cust_table = config.get_full_table_name("bronze", "mongodb_customers")
-    prod_table = config.get_full_table_name("bronze", "mongodb_products")
-
-    # 1. Fetch valid store IDs
-    valid_store_ids = [row.store_id for row in spark.table(stores_table).select("store_id").distinct().collect()]
-
-    # 2. Fetch valid customer IDs
-    valid_customer_ids = [row.customer_id for row in spark.table(cust_table).select("customer_id").distinct().collect()]
-
-    # 3. Fetch valid product IDs and their retail prices
-    valid_products = [
-        {"product_id": int(row.product_id), "unit_price": float(row.product_retail_price or 2.50)}
-        for row in spark.table(prod_table).select("product_id", "product_retail_price").distinct().collect()
-        if row.product_id is not None
+    # 1. Read Store IDs from ADLS Gen2 CSV
+    stores_path = f"{base_storage_path}{config._config['sources']['pos_csv']['stores']}"
+    valid_store_ids = [
+        str(row[0]).strip() 
+        for row in spark.read.option("header", "true").csv(stores_path).select("store_id").distinct().collect()
+        if row[0] is not None
     ]
 
-    print(f" Loaded {len(valid_store_ids)} stores, {len(valid_customer_ids)} customers, and {len(valid_products)} products.")
+    # 2. Connect to MongoDB Atlas
+    mongo_uri = dbutils.secrets.get(scope=secret_scope, key="mongodb-connection-uri").strip()
+    mongo_cfg = config._config["sources"]["mongodb"]
+    db_name = mongo_cfg.get("database", "maven_market_db")
+    
+    client = pymongo.MongoClient(mongo_uri)
+    db = client[db_name]
+
+    # 3. Read Customer IDs from MongoDB Atlas
+    raw_customers = list(db[mongo_cfg["collections"]["customers"]].find({}, {"customer_id": 1, "id": 1, "_id": 1}))
+    valid_customer_ids = [
+        str(doc.get("customer_id") or doc.get("id") or doc.get("_id")).strip()
+        for doc in raw_customers
+        if (doc.get("customer_id") or doc.get("id") or doc.get("_id")) is not None
+    ]
+
+    # 4. Read Product Catalog from MongoDB Atlas
+    raw_products = list(db[mongo_cfg["collections"]["products"]].find({}, {"product_id": 1, "id": 1, "_id": 1, "product_retail_price": 1}))
+    valid_products = [
+        {
+            "product_id": str(doc.get("product_id") or doc.get("id") or doc.get("_id")).strip(),
+            "unit_price": float(doc.get("product_retail_price") or 2.50)
+        }
+        for doc in raw_products
+        if (doc.get("product_id") or doc.get("id") or doc.get("_id")) is not None
+    ]
+
     return valid_store_ids, valid_customer_ids, valid_products
 
 def run_kafka_producer(spark: SparkSession, config: ConfigLoader, secret_scope: str = "scope-maven-market", num_events: int = 300, delay: float = 0.3):
