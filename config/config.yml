@@ -2,6 +2,10 @@ environment: "dev"
 catalog: "maven_market_uc"
 secret_scope: "scope-maven-market"
 
+# Delta Live Tables Pipeline Settings
+dlt:
+  pipeline_id: "7b2cf906-43b5-4563-ac2f-0d54fcfda519" # Replace with your DLT Pipeline ID
+
 storage:
   base_path: "abfss://root@stmavenmarket.dfs.core.windows.net"
   checkpoint_base: "abfss://root@stmavenmarket.dfs.core.windows.net/_checkpoints"

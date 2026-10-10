@@ -159,3 +159,12 @@ class ConfigLoader:
                 return defaults[expectation_key]
             raise KeyError(f"Expectation key '{expectation_key}' not defined in config.yml")
         return expectations[expectation_key]
+
+    def get_dlt_pipeline_id(self) -> str:
+        """Returns target DLT pipeline ID from config or environment variable."""
+        dlt_cfg = self._config_data.get("dlt", {})
+        if isinstance(dlt_cfg, dict) and "pipeline_id" in dlt_cfg:
+            return dlt_cfg["pipeline_id"]
+        if "dlt_pipeline_id" in self._config_data:
+            return self._config_data["dlt_pipeline_id"]
+        return os.getenv("DLT_PIPELINE_ID", "")

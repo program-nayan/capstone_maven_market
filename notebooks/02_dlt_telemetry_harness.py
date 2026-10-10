@@ -4,26 +4,31 @@ import sys
 import os
 sys.path.append(os.path.abspath(".."))
 
+from src.utils.config_loader import ConfigLoader
 from src.telemetry.dlt_listener import capture_dlt_pipeline_events
 
 # COMMAND ----------
-# Paste your DLT Pipeline ID (from the DLT UI pipeline details URL)
-sample_pipeline_id = "<YOUR_DLT_PIPELINE_ID>"
+# Load configuration and fetch pipeline ID dynamically
+config = ConfigLoader(env="dev")
+pipeline_id = config.get_dlt_pipeline_id()
 
-print(f"Executing DLT Telemetry Listener for Pipeline ID: {sample_pipeline_id}...")
+if not pipeline_id:
+    raise ValueError("DLT pipeline_id is missing from config.yml or environment variables.")
 
-# Execute event parser to log metrics to maven_market_uc.audit.audit_logs
+print(f"Executing DLT Telemetry Listener for Pipeline ID: {pipeline_id}...")
+
+# Capture DLT execution events and log to audit.audit_logs
 capture_dlt_pipeline_events(
     spark=spark,
-    pipeline_id=sample_pipeline_id,
-    catalog="maven_market_uc",
-    environment="dev"
+    pipeline_id=pipeline_id,
+    catalog=config.get_catalog(),
+    environment=config.environment
 )
 
 print("DLT event metrics successfully processed and logged to audit table.")
 
 # COMMAND ----------
-# Verify ingested event logs in audit table
+# Query audit log table to verify ingested DLT events
 display(spark.sql("""
     SELECT * 
     FROM maven_market_uc.audit.audit_logs 
