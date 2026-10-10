@@ -144,6 +144,19 @@ def silver_inventory():
 # ------------------------------------------------------------------
 # 5. Customer Master SCD Type 2 History Tracking
 # ------------------------------------------------------------------
+
+@dlt.view(
+    name="v_bronze_mongodb_customers",
+    comment="Streaming view on Bronze customers with overwrite tolerance"
+)
+def v_bronze_mongodb_customers():
+    return (
+        spark.readStream
+        .option("skipChangeCommits", "true")
+        .option("ignoreChanges", "true")
+        .table(f"{bronze_schema}.bronze_mongodb_customers")
+    )
+
 dlt.create_streaming_table(
     name=f"{silver_schema}.silver_dim_customers_scd",
     comment="SCD Type 2 history tracking table for MongoDB customer records",
@@ -152,7 +165,7 @@ dlt.create_streaming_table(
 
 dlt.apply_changes(
     target=f"{silver_schema}.silver_dim_customers_scd",
-    source=f"{bronze_schema}.bronze_mongodb_customers",
+    source="v_bronze_mongodb_customers",
     keys=["customer_id"],
     sequence_by="_ingested_at",
     stored_as_scd_type=2,
@@ -162,6 +175,19 @@ dlt.apply_changes(
 # ------------------------------------------------------------------
 # 6. Product Catalog SCD Type 2 History Tracking
 # ------------------------------------------------------------------
+
+@dlt.view(
+    name="v_bronze_mongodb_products",
+    comment="Streaming view on Bronze products with overwrite tolerance"
+)
+def v_bronze_mongodb_customers():
+    return (
+        spark.readStream
+        .option("skipChangeCommits", "true")
+        .option("ignoreChanges", "true")
+        .table(f"{bronze_schema}.bronze_mongodb_products")
+    )
+
 dlt.create_streaming_table(
     name=f"{silver_schema}.silver_dim_products_scd",
     comment="SCD Type 2 history tracking table for MongoDB product catalog",
@@ -170,7 +196,7 @@ dlt.create_streaming_table(
 
 dlt.apply_changes(
     target=f"{silver_schema}.silver_dim_products_scd",
-    source=f"{bronze_schema}.bronze_mongodb_products",
+    source="v_bronze_mongodb_products",
     keys=["product_id"],
     sequence_by="_ingested_at",
     stored_as_scd_type=2,
