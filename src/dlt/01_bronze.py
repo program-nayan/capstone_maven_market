@@ -70,14 +70,25 @@ for entity_name, collection_name in mongo_cfg["collections"].items():
     dlt_tbl_name = f"bronze_mongodb_{entity_name}"
     full_target_name = f"{bronze_schema}.{dlt_tbl_name}"
 
+    # 1. Register target as a Streaming Table to maintain append history
+    dlt.create_streaming_table(
+        name=full_target_name,
+        comment=f"Raw MongoDB Atlas streaming append ingestion for {collection_name} via PyMongo",
+        table_properties={"quality": "bronze"}
+    )
+    
     def create_mongo_dlt_table(coll_name, target_table):
-        @dlt.table(
-            name=target_table,
-            comment=f"Raw MongoDB Atlas direct ingestion for {coll_name} via PyMongo",
-            table_properties={
-                "quality": "bronze",
-                "delta.enableChangeDataFeed": "true"
-            }
+        # @dlt.table(
+        #     name=target_table,
+        #     comment=f"Raw MongoDB Atlas direct ingestion for {coll_name} via PyMongo",
+        #     table_properties={
+        #         "quality": "bronze",
+        #         "delta.enableChangeDataFeed": "true"
+        #     }
+        # )
+        @dlt.append_flow(
+            target=target_table,
+            name=f"flow_mongo_{entity_key}"
         )
         def ingest_mongo():
             # 1. Fetch raw documents from MongoDB Atlas via PyMongo
