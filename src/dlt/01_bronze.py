@@ -68,10 +68,11 @@ mongo_uri = dbutils.secrets.get(scope=secret_scope, key=mongo_secret_key).strip(
 
 for entity_name, collection_name in mongo_cfg["collections"].items():
     dlt_tbl_name = f"bronze_mongodb_{entity_name}"
+    full_target_name = f"{bronze_schema}.{dlt_tbl_name}"
 
-    def create_mongo_dlt_table(coll_name, tbl):
+    def create_mongo_dlt_table(coll_name, target_table):
         @dlt.table(
-            name=tbl,  # Registers 'bronze_mongodb_customers' & 'bronze_mongodb_products'
+            name=target_table,
             comment=f"Raw MongoDB Atlas direct ingestion for {coll_name} via PyMongo",
             table_properties={"quality": "bronze"}
         )
