@@ -48,11 +48,11 @@ resources:
       photon: true
       libraries:
         - notebook:
-            path: ./src/dlt/bronze.py
+            path: ./src/dlt/01_bronze.py
         - notebook:
-            path: ./src/dlt/silver.py
+            path: ./src/dlt/02_silver.py
         - notebook:
-            path: ./src/dlt/gold.py
+            path: ./src/dlt/03_gold.py
       configuration:
         bundle.environment: ${var.env}
         catalog_name: ${var.catalog_name}
