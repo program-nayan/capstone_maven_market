@@ -5,32 +5,32 @@
 ```mermaid
 flowchart TD
     subgraph Data_Sources["Data Sources (Batch, Real-Time, NoSQL)"]
-        S1["POS CSV Data\n(ADLS Gen2 Volume)"]
-        S2["Confluent Kafka\n(orders-stream)"]
-        S3["MongoDB Atlas\n(product_catalog)"]
+        S1["POS CSV Data<br/>(ADLS Gen2 Volume)"]
+        S2["Confluent Kafka<br/>(orders-stream)"]
+        S3["MongoDB Atlas<br/>(product_catalog)"]
     end
 
     subgraph Governance_Security["Unity Catalog & Security Governance (POC 3)"]
-        UC["Unity Catalog Metastore\n(maven_market_uc)"]
-        TAGS["Governed Tag Taxonomy\n(PII, Financial, EU/NA)"]
-        RLS["Row-Level Security (RLS)\n(audit.user_region_mapping)"]
-        CLS["Column-Level Masking (CLS)\n(Tag-Based Dynamic Masking)"]
+        UC["Unity Catalog Metastore<br/>(maven_market_uc)"]
+        TAGS["Governed Tag Taxonomy<br/>(PII, Financial, EU/NA)"]
+        RLS["Row-Level Security (RLS)<br/>(audit.user_region_mapping)"]
+        CLS["Column-Level Masking (CLS)<br/>(Tag-Based Dynamic Masking)"]
         UC --> TAGS
         TAGS --> RLS
         TAGS --> CLS
     end
 
     subgraph Medallion_Pipeline["Delta Live Tables Medallion Architecture"]
-        B["Bronze Layer\n(Auto Loader & Kafka Streams)"]
-        S["Silver Layer\n(Quality Expectations & SCD Type 2)"]
-        G["Gold Layer\n(Star Schema Dimensional Model)"]
+        B["Bronze Layer<br/>(Auto Loader & Kafka Streams)"]
+        S["Silver Layer<br/>(Quality Expectations & SCD Type 2)"]
+        G["Gold Layer<br/>(Star Schema Dimensional Model)"]
         B -->|Cleanse & Enforce Schema| S
         S -->|Aggregate & Model Facts/Dims| G
     end
 
     subgraph Observability["Telemetry & Audit Framework"]
-        CAPTURE["src/telemetry/run_audit.py\n(DLT event-log capture)"]
-        LOG["src/telemetry/logger.py\n(Central structured logger)"]
+        CAPTURE["src/telemetry/run_audit.py<br/>(DLT event-log capture)"]
+        LOG["src/telemetry/logger.py<br/>(Central structured logger)"]
         TBL["maven_market_uc.audit.audit_logs"]
         CAPTURE --> LOG
         LOG -->|Append run and event metadata| TBL
@@ -41,14 +41,14 @@ flowchart TD
         D2["2. Real-Time Ops"]
         D3["3. Regional Sales (RLS/CLS Enforced)"]
         D4["4. Platform Health (Audit Telemetry)"]
-        LF["Databricks Lakeflow Designer\n(Genie AI Data Prep)"]
+        LF["Databricks Lakeflow Designer<br/>(Genie AI Data Prep)"]
     end
 
     Data_Sources --> Medallion_Pipeline
     Medallion_Pipeline <--> Governance_Security
     Medallion_Pipeline -.-> Observability
-    Gold Layer --> Consumption
-    Lakeflow Designer --> Gold Layer
+    G --> Consumption
+    LF --> G
 ```
 
 The daily workflow runs `run_telemetry_audit` after the DLT task with `ALL_DONE`,
