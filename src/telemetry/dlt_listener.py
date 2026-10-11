@@ -1,7 +1,11 @@
 import hashlib
 import json
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Optional, Sequence
 from pyspark.sql import SparkSession
+from pyspark.sql.types import (
+    StructType, StructField, StringType, LongType, DoubleType, TimestampType
+)
 from src.telemetry.logger import TelemetryLogger
 
 
@@ -18,7 +22,28 @@ def _parse_details(value: object) -> dict:
     raise TypeError(f"Unsupported DLT event details type: {type(value).__name__}")
 
 
+def _extract_flow_name(details: dict) -> Optional[str]:
+    """Safely extracts flow or table names from DLT event details without throwing AttributeError."""
+    if not isinstance(details, dict):
+        return None
+        
+    if details.get("flow_name"):
+        return str(details["flow_name"])
+        
+    for key in ("flow_progress", "pipeline_progress", "update_progress"):
+        block = details.get(key)
+        if isinstance(block, dict):
+            if block.get("name"):
+                return str(block["name"])
+            status = block.get("status")
+            if isinstance(status, dict) and status.get("name"):
+                return str(status["name"])
+    return None
+
+
 def _event_status(event_type: str, details: dict) -> str:
+    if not isinstance(details, dict):
+        return "IN_PROGRESS"
     state = details.get("state", "")
     for event_key in (
         "flow_progress",
@@ -28,11 +53,12 @@ def _event_status(event_type: str, details: dict) -> str:
     ):
         event_details = details.get(event_key, {})
         if isinstance(event_details, dict):
-            state = (
-                event_details.get("status")
-                or event_details.get("state")
-                or state
-            )
+            status_or_state = event_details.get("status") or event_details.get("state")
+            if isinstance(status_or_state, (str, int)):
+                state = status_or_state
+            elif isinstance(status_or_state, dict):
+                state = status_or_state.get("state") or status_or_state.get("status") or state
+
     normalized_state = str(state).upper()
     if "FAIL" in normalized_state or "ERROR" in normalized_state:
         return "FAILED"
@@ -48,8 +74,8 @@ def capture_dlt_pipeline_events(
     environment: str = "dev"
 ) -> None:
     """
-    Reads execution metrics from DLT system event logs using the event_log() 
-    table function and converts them into audit entries in audit.audit_logs.
+    Reads execution metrics from DLT system event logs using event_log()
+    and batch-appends structured entries into audit.audit_logs.
     """
     logger = TelemetryLogger(spark=spark, catalog=catalog, environment=environment)
     logger.ensure_audit_table()
@@ -57,6 +83,8 @@ def capture_dlt_pipeline_events(
     
     try:
         escaped_pipeline_name = pipeline_name.replace("'", "''")
+        
+        # 1. Fetch timestamp watermark from existing audit logs
         watermark_row = spark.sql(
             f"""
             SELECT MAX(
@@ -66,17 +94,18 @@ def capture_dlt_pipeline_events(
             WHERE pipeline_name = '{escaped_pipeline_name}'
             """
         ).first()
-        last_event_timestamp = (
-            watermark_row["last_event_timestamp"] if watermark_row else None
-        )
+        
+        last_event_timestamp = watermark_row["last_event_timestamp"] if watermark_row else None
         timestamp_filter = ""
         if last_event_timestamp is not None:
-            if isinstance(last_event_timestamp, datetime):
-                watermark = last_event_timestamp.isoformat(sep=" ")
-            else:
-                watermark = str(last_event_timestamp)
+            watermark = (
+                last_event_timestamp.isoformat(sep=" ")
+                if isinstance(last_event_timestamp, datetime)
+                else str(last_event_timestamp)
+            )
             timestamp_filter = f"AND timestamp >= TIMESTAMP '{watermark}'"
 
+        # 2. Fetch existing event keys to avoid duplicate writes
         existing_event_keys = {
             row["event_key"]
             for row in spark.sql(
@@ -90,7 +119,8 @@ def capture_dlt_pipeline_events(
         }
 
         escaped_pipeline_id = pipeline_id.replace("'", "''")
-        # Databricks DLT system event log function
+        
+        # 3. Query DLT system event log function
         events_df = spark.sql(f"""
             SELECT 
                 timestamp,
@@ -118,13 +148,25 @@ def capture_dlt_pipeline_events(
             )
             return
 
+        batch_log_entries = []
+        now_utc = datetime.now(timezone.utc)
+
+        # 4. Collect and transform events safely in memory
         for row in rows:
             details_json = _parse_details(row["details"])
-            flow_name = details_json.get("flow_name", "dlt_pipeline_step")
             
-            # Extract output row counts from event metadata
-            metrics = details_json.get("flow_progress", {}).get("metrics", {})
-            records_processed = int(metrics.get("num_output_rows", 0) or 0)
+            # Resolve actual flow/table name
+            raw_flow = _extract_flow_name(details_json)
+            if raw_flow:
+                flow_name = raw_flow.split(".")[-1]
+            else:
+                flow_name = "pipeline_update" if row["event_type"] == "update_progress" else "dlt_flow"
+            
+            # Extract row metrics safely
+            flow_progress = details_json.get("flow_progress", {}) if isinstance(details_json, dict) else {}
+            metrics = flow_progress.get("metrics", {}) if isinstance(flow_progress, dict) else {}
+            records_processed = int(metrics.get("num_output_rows", 0) or 0) if isinstance(metrics, dict) else 0
+            
             event_timestamp = row["timestamp"]
             timestamp_value = (
                 event_timestamp.isoformat()
@@ -133,6 +175,8 @@ def capture_dlt_pipeline_events(
             )
             event_type = row["event_type"]
             message = row["message"]
+            
+            # Generate SHA256 event hash
             event_key = hashlib.sha256(
                 "|".join(
                     (
@@ -145,24 +189,52 @@ def capture_dlt_pipeline_events(
                     )
                 ).encode("utf-8")
             ).hexdigest()
+            
             if event_key in existing_event_keys:
                 continue
 
-            logger.log_event(
-                pipeline_name=pipeline_name,
-                step_name=flow_name,
-                status=_event_status(event_type, details_json),
-                records_processed=records_processed,
-                additional_metadata={
-                    "event_key": event_key,
-                    "event_timestamp": timestamp_value,
-                    "event_type": event_type,
-                    "pipeline_id": pipeline_id,
-                    "raw_message": message
-                }
-            )
+            metadata_payload = json.dumps({
+                "event_key": event_key,
+                "event_timestamp": timestamp_value,
+                "event_type": event_type,
+                "pipeline_id": pipeline_id,
+                "raw_message": message
+            })
+
+            batch_log_entries.append((
+                now_utc,
+                environment,
+                pipeline_name,
+                flow_name,
+                _event_status(event_type, details_json),
+                records_processed,
+                0.0,
+                "",
+                metadata_payload
+            ))
             existing_event_keys.add(event_key)
-            
+
+        if not batch_log_entries:
+            print(f"No new distinct events to log for pipeline {pipeline_id}")
+            return
+
+        # 5. Define schema & execute a SINGLE batch write transaction
+        audit_schema = StructType([
+            StructField("timestamp", TimestampType(), False),
+            StructField("environment", StringType(), False),
+            StructField("pipeline_name", StringType(), False),
+            StructField("step_name", StringType(), False),
+            StructField("status", StringType(), False),
+            StructField("records_processed", LongType(), False),
+            StructField("execution_time_seconds", DoubleType(), True),
+            StructField("error_message", StringType(), True),
+            StructField("metadata", StringType(), True)
+        ])
+
+        batch_df = spark.createDataFrame(batch_log_entries, schema=audit_schema)
+        batch_df.write.format("delta").mode("append").saveAsTable(logger.full_table_path)
+        print(f"Successfully batch-logged {len(batch_log_entries)} DLT events to {logger.full_table_path}")
+
     except Exception as e:
         logger.log_exception(
             pipeline_name=pipeline_name,

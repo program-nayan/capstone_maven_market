@@ -1,4 +1,5 @@
 import argparse
+import os
 from pathlib import Path
 import sys
 from typing import Optional, Sequence
@@ -7,10 +8,9 @@ from typing import Optional, Sequence
 if "__file__" in globals():
     PROJECT_ROOT = Path(__file__).resolve().parents[2]
 else:
-    # Fallback when executed inside Databricks kernel wrappers
-    cwd = Path(os.getcwd()).resolve()
+    cwd = Path.cwd().resolve()
     PROJECT_ROOT = cwd.parents[1] if cwd.name == "telemetry" else cwd
-    
+
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -29,6 +29,7 @@ def main(
     parser.add_argument("--pipeline-id", required=True)
     parser.add_argument("--catalog", required=True)
     parser.add_argument("--environment", required=True)
+    parser.add_argument("--deploy-views", action="store_true", help="Optionally re-deploy SQL views")
     args = parser.parse_args(argv)
 
     spark = spark or SparkSession.builder.getOrCreate()
@@ -46,14 +47,20 @@ def main(
             status="STARTED",
             additional_metadata={"pipeline_id": args.pipeline_id}
         )
+        
+        # 1. Fast batch DLT event ingestion (~1-2s)
         capture_dlt_pipeline_events(
             spark=spark,
             pipeline_id=args.pipeline_id,
             catalog=args.catalog,
             environment=args.environment
         )
-        config = ConfigLoader(env=args.environment, catalog=args.catalog)
-        AuditViewsManager(spark=spark, config_loader=config).deploy_all_views()
+        
+        # 2. Re-deploy views ONLY if explicitly requested
+        if args.deploy_views:
+            config = ConfigLoader(env=args.environment, catalog=args.catalog)
+            AuditViewsManager(spark=spark, config_loader=config).deploy_all_views()
+
         logger.log_event(
             pipeline_name="databricks_daily_workflow",
             step_name="capture_dlt_events",
