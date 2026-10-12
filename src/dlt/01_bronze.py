@@ -89,14 +89,6 @@ for entity_name, collection_name in mongo_cfg["collections"].items():
             if raw_docs:
                 cleaned_docs = [json.loads(json.dumps(doc, default=str)) for doc in raw_docs]
                 
-                # Standardize primary key column name
-                target_id_col = "customer_id" if entity_key == "customers" else "product_id"
-                for doc in cleaned_docs:
-                    if "id" in doc:
-                        doc[target_id_col] = doc.pop("id")
-                    elif "_id" in doc:
-                        doc[target_id_col] = doc.pop("_id")
-
                 batch_ts = int(time.time())
                 file_path = f"{landing_path}/snapshot_{batch_ts}.json"
                 dbutils.fs.put(file_path, json.dumps(cleaned_docs), overwrite=True)
