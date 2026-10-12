@@ -40,9 +40,12 @@ def test_capture_dlt_pipeline_events_mock():
             environment="dev"
         )
         
-        assert mock_logger_inst.log_event.call_count == 1
-        assert mock_logger_inst.log_event.call_args.kwargs["status"] == "IN_PROGRESS"
-        assert "event_key" in mock_logger_inst.log_event.call_args.kwargs["additional_metadata"]
+        mock_logger_inst.log_event.assert_not_called()
+        mock_spark.createDataFrame.assert_called_once()
+        batch_entries = mock_spark.createDataFrame.call_args.args[0]
+        assert len(batch_entries) == 1
+        assert batch_entries[0][4] == "IN_PROGRESS"
+        assert "event_key" in batch_entries[0][8]
 
 
 def test_event_status_does_not_mark_unfinished_flows_successful():

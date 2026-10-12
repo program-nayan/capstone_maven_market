@@ -11,14 +11,23 @@ def test_bronze_registers_csv_mongodb_and_kafka_tables(monkeypatch):
     assert set(loaded.dlt.tables) == {
         "bronze.bronze_transactions",
         "bronze.bronze_stores",
-        "bronze_mongodb_customers",
-        "bronze_mongodb_products",
+        "bronze.bronze_mongodb_customers",
+        "bronze.bronze_mongodb_products",
         "bronze.bronze_kafka_orders",
         "bronze.bronze_kafka_inventory"
     }
     assert all(
-        table["metadata"]["table_properties"] == {"quality": "bronze"}
+        table["metadata"]["table_properties"]["quality"] == "bronze"
         for table in loaded.dlt.tables.values()
+    )
+    assert all(
+        loaded.dlt.tables[table_name]["metadata"]["table_properties"].get(
+            "delta.enableChangeDataFeed"
+        ) == "true"
+        for table_name in (
+            "bronze.bronze_mongodb_customers",
+            "bronze.bronze_mongodb_products"
+        )
     )
 
 
@@ -60,7 +69,7 @@ def test_bronze_mongodb_converts_documents_and_adds_source_system(monkeypatch):
     dataframe = MagicMock()
     loaded.spark.createDataFrame.return_value = dataframe
 
-    result = loaded.dlt.tables["bronze_mongodb_customers"]["function"]()
+    result = loaded.dlt.tables["bronze.bronze_mongodb_customers"]["function"]()
 
     input_frame = loaded.spark.createDataFrame.call_args.args[0]
     assert isinstance(input_frame, pd.DataFrame)

@@ -8,6 +8,7 @@ __pycache__/
 *$py.class
 .venv/
 venv/
+.venv-py311
 *.egg-info/
 .pytest_cache/
 
