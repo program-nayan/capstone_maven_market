@@ -8,7 +8,7 @@ from pyspark.sql import SparkSession
 from databricks.sdk.runtime import dbutils
 from src.utils.config_loader import ConfigLoader
 
-def load_reference_dimension_keys_pyspark(spark: SparkSession, config: ConfigLoader, secret_scope: str = "scope-maven-market"):
+def load_reference_dimension_keys(spark: SparkSession, config: ConfigLoader, secret_scope: str = "scope-maven-market"):
     base_storage_path = config._config["storage"]["base_path"]
     
     # 1. Read Store IDs from ADLS Gen2 CSV
