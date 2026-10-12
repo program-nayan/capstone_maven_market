@@ -32,10 +32,9 @@ jobs:
 
       - name: Run Flake8 Code Linting
         run: |
-          # Stop build on syntax errors or undefined names
-          flake8 src/ --count --select=E9,F63,F7,F82 --show-source --statistics
-          # Exit zero treats warnings as non-fatal
-          flake8 src/ --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
+          # Register Databricks runtime globals (spark, dbutils, dlt, display) as recognized built-ins
+          flake8 src/ --builtins=spark,dbutils,dlt,display --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 src/ --builtins=spark,dbutils,dlt,display --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
 
       - name: Execute Pytest Suite
         run: |
