@@ -70,43 +70,43 @@ mongo_uri = dbutils.secrets.get(scope=secret_scope, key=mongo_secret_key).strip(
 for entity_name, collection_name in mongo_cfg["collections"].items():
     dlt_tbl_name = f"bronze_mongodb_{entity_name}"
     full_target_name = f"{bronze_schema}.{dlt_tbl_name}"
-    raw_landing_path = f"{base_path}/raw/mongodb/{collection_name}"
 
-    def create_mongo_autoloader_table(entity_key, coll_name, tbl, landing_path):
+    def create_mongo_dlt_table(coll_name, target_table):
         @dlt.table(
-            name=tbl,
-            comment=f"Raw streaming Auto Loader ingestion for MongoDB collection '{coll_name}'",
+            name=target_table,
+            comment=f"Raw MongoDB Atlas direct ingestion for {coll_name} via PyMongo",
             table_properties={"quality": "bronze"}
         )
         def ingest_mongo():
-            # 1. Fetch snapshot from MongoDB Atlas via PyMongo
+            # 1. Fetch raw documents from MongoDB Atlas via PyMongo
             client = pymongo.MongoClient(mongo_uri)
             db = client[db_name]
             collection = db[coll_name]
+            
             raw_docs = list(collection.find())
+            print(raw_docs)
 
-            # 2. Save snapshot JSON payload to landing storage
-            if raw_docs:
-                cleaned_docs = [json.loads(json.dumps(doc, default=str)) for doc in raw_docs]
-                
-                batch_ts = int(time.time())
-                file_path = f"{landing_path}/snapshot_{batch_ts}.json"
-                dbutils.fs.put(file_path, json.dumps(cleaned_docs), overwrite=True)
+            if not raw_docs:
+                # Return empty DataFrame with dummy schema if collection is empty
+                pass
 
-            # 3. Read landing files using Auto Loader (returns a true Streaming DataFrame)
+            # 2. Convert BSON objects into standard JSON strings
+            cleaned_docs = [json.loads(json.dumps(doc, default=str)) for doc in raw_docs]
+
+            # 3. Convert to Pandas DataFrame first to unify numeric types
+            df_pd = pd.DataFrame(cleaned_docs)
+
+            # 4. Convert Pandas DataFrame to PySpark DataFrame
+            df_mongo = spark.createDataFrame(df_pd)
+
+            # 5. Enrich metadata and return DataFrame (DLT handles saving to Unity Catalog)
             return (
-                spark.readStream
-                .format("cloudFiles")
-                .option("cloudFiles.format", "json")
-                .option("cloudFiles.inferColumnTypes", "true")
-                .load(landing_path)
+                df_mongo
                 .withColumn("_ingested_at", current_timestamp())
                 .withColumn("_source_system", lit(f"MongoDB_Atlas.{coll_name}"))
             )
 
-        return ingest_mongo
-    
-    create_mongo_autoloader_table(entity_name, collection_name, full_target_name, raw_landing_path)
+    create_mongo_dlt_table(collection_name, full_target_name)
 
 # ------------------------------------------------------------------
 # 3. Dynamic Kafka Streams Ingestion

@@ -145,7 +145,7 @@ def silver_inventory():
 # 5. Customer Master SCD Type 2 History Tracking
 # ------------------------------------------------------------------
 
-dlt.create_streaming_table(
+dlt.table(
     name=f"{silver_schema}.silver_dim_customers_scd",
     comment="SCD Type 2 history tracking table for MongoDB customer records",
     table_properties={"quality": "silver"}
@@ -164,7 +164,7 @@ dlt.apply_changes(
 # 6. Product Catalog SCD Type 2 History Tracking
 # ------------------------------------------------------------------
 
-dlt.create_streaming_table(
+dlt.table(
     name=f"{silver_schema}.silver_dim_products_scd",
     comment="SCD Type 2 history tracking table for MongoDB product catalog",
     table_properties={"quality": "silver"}
@@ -186,7 +186,7 @@ dlt.apply_changes(
 # ------------------------------------------------------------------
 # 7. Store Master SCD Type 2 History Tracking
 # ------------------------------------------------------------------
-dlt.create_streaming_table(
+dlt.table(
     name=f"{silver_schema}.silver_dim_stores_scd",
     comment="SCD Type 2 history tracking table for POS store master data",
     table_properties={"quality": "silver"}
