@@ -55,7 +55,7 @@ def load_reference_dimension_keys(spark: SparkSession, config: ConfigLoader, sec
 
     return valid_store_ids, valid_dates, valid_customer_ids, valid_products
 
-def run_kafka_producer(spark: SparkSession, config: ConfigLoader, secret_scope: str = "scope-maven-market", num_events: int = 300, delay: float = 0.3):
+def run_kafka_producer(spark: SparkSession, config: ConfigLoader, secret_scope: str = "scope-maven-market", num_events: int = 1500, delay: float = 0.05):
     kafka_cfg = config.get_kafka_config()
     
     # Fetch secrets securely from Key Vault
@@ -116,7 +116,7 @@ def run_kafka_producer(spark: SparkSession, config: ConfigLoader, secret_scope: 
             "unit_price": selected_prod["unit_price"],
             "event_timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
         }
-        
+
         producer.produce(
             topic=orders_topic,
             key=order_event["order_id"],
