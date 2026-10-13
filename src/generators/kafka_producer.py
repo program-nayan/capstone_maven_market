@@ -19,6 +19,13 @@ def load_reference_dimension_keys(spark: SparkSession, config: ConfigLoader, sec
         if row[0] is not None
     ]
 
+    calendar_path = f"{base_storage_path}{config._config['sources']['pos_csv']['calendar']}"
+    valid_dates = [
+        str(row[0]).strip()
+        for row in spark.read.option("header", "true").csv(calendar_path).select("date").distinct().collect()
+        if row[0] is not None
+    ]
+
     # 2. Connect to MongoDB Atlas
     mongo_uri = dbutils.secrets.get(scope=secret_scope, key="mongodb-connection-uri").strip()
     mongo_cfg = config._config["sources"]["mongodb"]
@@ -46,7 +53,7 @@ def load_reference_dimension_keys(spark: SparkSession, config: ConfigLoader, sec
         if (doc.get("product_id") or doc.get("id") or doc.get("_id")) is not None
     ]
 
-    return valid_store_ids, valid_customer_ids, valid_products
+    return valid_store_ids, valid_dates, valid_customer_ids, valid_products
 
 def run_kafka_producer(spark: SparkSession, config: ConfigLoader, secret_scope: str = "scope-maven-market", num_events: int = 300, delay: float = 0.3):
     kafka_cfg = config.get_kafka_config()
@@ -57,7 +64,7 @@ def run_kafka_producer(spark: SparkSession, config: ConfigLoader, secret_scope: 
     kafka_api_secret = dbutils.secrets.get(scope=secret_scope, key="kafka-api-secret")
 
     # Fetch real foreign keys from Bronze tables
-    store_ids, customer_ids, product_catalog = load_reference_dimension_keys(spark, config)
+    store_ids, calendar_dates, customer_ids, product_catalog = load_reference_dimension_keys(spark, config)
 
     producer_config = {
         'bootstrap.servers': kafka_bootstrap,
@@ -79,27 +86,37 @@ def run_kafka_producer(spark: SparkSession, config: ConfigLoader, secret_scope: 
     print(f"Streaming referentially aligned events to Confluent Kafka [{kafka_bootstrap}]...")
 
     for i in range(num_events):
-        now_dt = datetime.utcnow()
-        now_str = now_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-        stock_date_str = (now_dt - timedelta(days=random.randint(1, 5))).strftime("%Y-%m-%d")
-
-        # Pick real foreign keys from ingested datasets
         selected_store = random.choice(store_ids)
         selected_customer = random.choice(customer_ids)
         selected_prod = random.choice(product_catalog)
         
-        # 1. Order Event (Matches MongoDB Products, Customers, and Stores)
+        # Pick a valid calendar date
+        base_date_str = random.choice(calendar_dates)  # Expected format: "YYYY-MM-DD" or similar
+        random_hour = random.randint(8, 21)
+        random_min = random.randint(0, 59)
+        random_sec = random.randint(0, 59)
+        
+        # Build transaction timestamp
+        trans_timestamp_str = f"{base_date_str}T{random_hour:02d}:{random_min:02d}:{random_sec:02d}Z"
+        
+        try:
+            base_date = datetime.strptime(base_date_str, "%Y-%m-%d")
+            stock_date_str = (base_date - timedelta(days=random.randint(1, 5))).strftime("%Y-%m-%d")
+        except ValueError:
+            stock_date_str = base_date_str
+
         order_event = {
             "order_id": f"ORD-{random.randint(100000, 999999)}",
-            "transaction_date": now_str,
+            "transaction_date": trans_timestamp_str,
             "stock_date": stock_date_str,
             "product_id": selected_prod["product_id"],
             "customer_id": selected_customer,
             "store_id": selected_store,
             "quantity": random.randint(1, 6),
             "unit_price": selected_prod["unit_price"],
-            "event_timestamp": now_str
+            "event_timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
         }
+        
         producer.produce(
             topic=orders_topic,
             key=order_event["order_id"],
