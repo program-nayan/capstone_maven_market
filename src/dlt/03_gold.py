@@ -36,11 +36,12 @@ def fact_sales():
     
     return (
         orders_df
+        .withColumn("order_date", to_date(col("order_date")))
         .groupBy(
             "store_id",
             "product_id",
             "customer_id",
-            to_date(col("order_date")).alias("order_date")
+            "order_date"
         )
         .agg(
             _sum("total_amount").alias("daily_revenue"),

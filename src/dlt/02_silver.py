@@ -70,7 +70,7 @@ def silver_orders():
     
     # 3. Kafka Payload Schema Parsing
     order_payload_schema = (
-        "order_id STRING, transaction_date TIMESTAMP, stock_date STRING, "
+        "order_id STRING, transaction_date STRING, stock_date STRING, "
         "product_id STRING, customer_id STRING, store_id STRING, "
         "quantity INT, unit_price DOUBLE, event_timestamp TIMESTAMP"
     )
@@ -82,24 +82,49 @@ def silver_orders():
             col("_ingested_at")
         )
         .select("payload.*", "_ingested_at")
+        .withColumn("product_id", col("product_id").cast("string"))
     )
     
+    # Handles M/d/yyyy'T'HH:mm:ss'Z', ISO formats, and falls back to event_timestamp / _ingested_at
+    parsed_with_dates = parsed_orders.withColumn(
+        "order_date",
+        coalesce(
+            # Parses "5/5/1997T21:27:49Z"
+            to_timestamp(col("transaction_date"), "M/d/yyyy'T'HH:mm:ss'Z'"),
+            to_timestamp(col("transaction_date"), "M/d/yyyy'T'HH:mm:ssX"),
+            # Parses standard ISO "1997-05-05T21:27:49Z"
+            to_timestamp(col("transaction_date"), "yyyy-MM-dd'T'HH:mm:ss'Z'"),
+            to_timestamp(col("transaction_date"), "yyyy-MM-dd'T'HH:mm:ssX"),
+            # Standard auto-parser fallback
+            to_timestamp(col("transaction_date")),
+            # Fallback to the real-time event timestamp if transaction_date cannot be parsed
+            col("event_timestamp"),
+            col("_ingested_at")
+        )
+    )
+
     # 4. Stream-Static Join
+    products_static = products_df.withColumn("product_id", col("product_id").cast("string"))
+    
+    # 5. Stream-Static Join
     return (
-        parsed_orders
-        .join(products_df, on="product_id", how="inner")
+        parsed_with_dates
+        .join(products_static, on="product_id", how="inner")
         .select(
-            parsed_orders["order_id"],
-            parsed_orders["customer_id"],
-            parsed_orders["store_id"],
-            parsed_orders["product_id"],
-            parsed_orders["quantity"],
-            parsed_orders["unit_price"],
-            (parsed_orders["quantity"] * parsed_orders["unit_price"]).alias("total_amount"),
-            parsed_orders["transaction_date"].alias("order_date"),
-            products_df["product_name"],
-            products_df["product_brand"],
-            products_df["product_retail_price"]
+            parsed_with_dates["order_id"],
+            parsed_with_dates["customer_id"],
+            parsed_with_dates["store_id"],
+            parsed_with_dates["product_id"],
+            parsed_with_dates["quantity"],
+            parsed_with_dates["unit_price"],
+            (parsed_with_dates["quantity"] * parsed_with_dates["unit_price"]).alias("total_amount"),
+            parsed_with_dates["order_date"],
+            parsed_with_dates["stock_date"],
+            parsed_with_dates["event_timestamp"],
+            products_static["product_name"],
+            products_static["product_brand"],
+            products_static["product_retail_price"],
+            parsed_with_dates["_ingested_at"]
         )
     )
 
