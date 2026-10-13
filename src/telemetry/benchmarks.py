@@ -29,13 +29,13 @@ class PerformanceBenchmark:
         sql_query: str
     ) -> Dict[str, Any]:
         """Executes a SQL query, measures latency, and logs execution benchmarks to audit table."""
-        start_time = time.time()
+        start_time = time.perf_counter()
         
         # Execute query
         df = self.spark.sql(sql_query)
         record_count = df.count()  # Force execution evaluation
         
-        elapsed_time = round(time.time() - start_time, 4)
+        elapsed_time = round(time.perf_counter() - start_time, 4)
         records_per_second = round(record_count / elapsed_time, 2) if elapsed_time > 0 else record_count
 
         benchmark_metrics = {
@@ -50,6 +50,7 @@ class PerformanceBenchmark:
             step_name=query_name,
             status="BENCHMARK",
             records_processed=record_count,
+            execution_time_seconds=elapsed_time,
             additional_metadata=benchmark_metrics
         )
 

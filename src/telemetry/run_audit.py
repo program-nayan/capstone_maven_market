@@ -2,6 +2,7 @@ import argparse
 import os
 from pathlib import Path
 import sys
+import time
 from typing import Optional, Sequence
 
 # Safely resolve project root across both CLI and Databricks execution wrappers
@@ -39,6 +40,7 @@ def main(
         environment=args.environment
     )
     logger.ensure_audit_table()
+    start_time = time.perf_counter()
 
     try:
         logger.log_event(
@@ -47,6 +49,7 @@ def main(
             status="STARTED",
             additional_metadata={"pipeline_id": args.pipeline_id}
         )
+        start_time = time.perf_counter()
         
         # 1. Fast batch DLT event ingestion (~1-2s)
         capture_dlt_pipeline_events(
@@ -65,13 +68,15 @@ def main(
             pipeline_name="databricks_daily_workflow",
             step_name="capture_dlt_events",
             status="SUCCESS",
+            execution_time_seconds=round(time.perf_counter() - start_time, 4),
             additional_metadata={"pipeline_id": args.pipeline_id}
         )
     except Exception as exc:
         logger.log_exception(
             pipeline_name="databricks_daily_workflow",
             step_name="capture_dlt_events",
-            exception=exc
+            exception=exc,
+            execution_time_seconds=round(time.perf_counter() - start_time, 4)
         )
         raise
 

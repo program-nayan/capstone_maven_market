@@ -27,14 +27,13 @@ def log_execution(pipeline_name: str, step_name: str):
                 return func(*args, **kwargs)
 
             logger = TelemetryLogger(spark=spark)
-            start_time = time.time()
-            
             logger.log_event(
                 pipeline_name=pipeline_name,
                 step_name=step_name,
                 status="STARTED",
                 records_processed=0
             )
+            start_time = time.perf_counter()
 
             try:
                 result = func(*args, **kwargs)
@@ -47,7 +46,7 @@ def log_execution(pipeline_name: str, step_name: str):
                     else:
                         records_count = -1  # Indicates streaming query
 
-                execution_time_sec = round(time.time() - start_time, 2)
+                execution_time_sec = round(time.perf_counter() - start_time, 4)
                 
                 logger.log_event(
                     pipeline_name=pipeline_name,
@@ -59,7 +58,7 @@ def log_execution(pipeline_name: str, step_name: str):
                 return result
 
             except Exception as e:
-                execution_time_sec = round(time.time() - start_time, 2)
+                execution_time_sec = round(time.perf_counter() - start_time, 4)
                 logger.log_exception(
                     pipeline_name=pipeline_name,
                     step_name=step_name,

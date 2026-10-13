@@ -52,6 +52,13 @@ class TelemetryLogger:
             """
         )
 
+        columns = {column.lower() for column in self.spark.table(self.full_table_path).columns}
+        if "execution_time_seconds" not in columns:
+            self.spark.sql(
+                f"ALTER TABLE {quoted_catalog}.{quoted_schema}.{quoted_table} "
+                "ADD COLUMNS (execution_time_seconds DOUBLE)"
+            )
+
     def _get_utc_now(self) -> datetime:
         return datetime.now(timezone.utc)
 
@@ -75,7 +82,7 @@ class TelemetryLogger:
             step_name,
             status.upper(),
             int(records_processed),
-            float(execution_time_seconds) if execution_time_seconds is not None else 0.0,
+            float(execution_time_seconds) if execution_time_seconds is not None else None,
             error_message if error_message else "",
             json.dumps(additional_metadata or {}, default=str, sort_keys=True)
         )]

@@ -208,7 +208,7 @@ def capture_dlt_pipeline_events(
                 flow_name,
                 _event_status(event_type, details_json),
                 records_processed,
-                0.0,
+                None,
                 "",
                 metadata_payload
             ))
