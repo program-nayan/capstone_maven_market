@@ -142,6 +142,9 @@ class ConfigLoader:
 
     def get_kafka_config(self) -> Dict[str, Any]:
         """Returns Kafka streaming configurations and topics."""
+        sources = self._config_data.get("sources", {})
+        if isinstance(sources, dict) and "kafka" in sources:
+            return sources["kafka"]
         return self._config_data.get("kafka", {})
 
     def get_secret_scope(self) -> str:
@@ -176,3 +179,17 @@ class ConfigLoader:
         if "dlt_pipeline_id" in self._config_data:
             return self._config_data["dlt_pipeline_id"]
         return os.getenv("DLT_PIPELINE_ID", "")
+    
+    @property
+    def _config(self) -> Dict[str, Any]:
+        """Backward-compatibility alias for internal scripts."""
+        return self._config_data
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        """Public alias for underlying config dictionary."""
+        return self._config_data
+
+    def __getitem__(self, item: str) -> Any:
+        """Allows direct dictionary access like config['storage']."""
+        return self._config_data[item]

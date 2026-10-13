@@ -59,7 +59,7 @@ def run_kafka_producer(spark: SparkSession, config: ConfigLoader, secret_scope: 
     kafka_cfg = config.get_kafka_config()
     
     # Fetch secrets securely from Key Vault
-    kafka_bootstrap = kafka_cfg.get("bootstrap_servers")
+    kafka_bootstrap = dbutils.secrets.get(scope=secret_scope, key=kafka_cfg["bootstrap_secret_key"])
     kafka_api_key = dbutils.secrets.get(scope=secret_scope, key="kafka-api-key")
     kafka_api_secret = dbutils.secrets.get(scope=secret_scope, key="kafka-api-secret")
 
@@ -134,7 +134,7 @@ def run_kafka_producer(spark: SparkSession, config: ConfigLoader, secret_scope: 
             "stock_level": stock_qty,
             "reorder_threshold": reorder_thresh,
             "restock_flag": bool(stock_qty <= reorder_thresh),
-            "event_timestamp": now_str
+            "event_timestamp": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
         }
         producer.produce(
             topic=inventory_topic,
