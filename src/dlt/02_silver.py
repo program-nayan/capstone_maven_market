@@ -176,11 +176,10 @@ dlt.create_streaming_table(
     table_properties={"quality": "silver"}
 )
 
-dlt.apply_changes(
+dlt.apply_changes_from_snapshot(
     target=f"{silver_schema}.silver_dim_customers_scd",
     source=f"{bronze_schema}.bronze_mongodb_customers",
     keys=["customer_id"],
-    sequence_by="_ingested_at",
     stored_as_scd_type=2,
     track_history_column_list=["customer_city", "customer_state_province", "customer_postal_code", "customer_country", "marital_status", "yearly_income", "total_children", "education"]
 )
@@ -195,11 +194,10 @@ dlt.create_streaming_table(
     table_properties={"quality": "silver"}
 )
 
-dlt.apply_changes(
+dlt.apply_changes_from_snapshot(
     target=f"{silver_schema}.silver_dim_products_scd",
     source=f"{bronze_schema}.bronze_mongodb_products",
     keys=["product_id"],
-    sequence_by="_ingested_at",
     stored_as_scd_type=2,
     track_history_column_list=[
         "product_retail_price",
