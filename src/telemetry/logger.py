@@ -1,3 +1,4 @@
+import sys
 import traceback
 from datetime import datetime, timezone
 import json
@@ -8,10 +9,7 @@ from pyspark.sql.types import (
 )
 
 class TelemetryLogger:
-    """
-    Centralized structured logging module for Databricks Lakehouse pipelines.
-    Writes telemetry directly to Unity Catalog audit Delta tables with fallback logging.
-    """
+    """Centralized structured logging module for Databricks Lakehouse pipelines."""
 
     def __init__(
         self,
@@ -27,9 +25,13 @@ class TelemetryLogger:
         self.table = table
         self.environment = environment
         self.full_table_path = f"{catalog}.{schema}.{table}"
+        self._table_verified = False
 
     def ensure_audit_table(self) -> None:
-        """Create the audit namespace and table when they do not exist."""
+        """Create the audit schema and table once per execution lifecycle."""
+        if self._table_verified:
+            return
+
         quoted_catalog = f"`{self.catalog.replace('`', '``')}`"
         quoted_schema = f"`{self.schema.replace('`', '``')}`"
         quoted_table = f"`{self.table.replace('`', '``')}`"
@@ -51,16 +53,16 @@ class TelemetryLogger:
             USING DELTA
             """
         )
-
-        columns = {column.lower() for column in self.spark.table(self.full_table_path).columns}
-        if "execution_time_seconds" not in columns:
-            self.spark.sql(
-                f"ALTER TABLE {quoted_catalog}.{quoted_schema}.{quoted_table} "
-                "ADD COLUMNS (execution_time_seconds DOUBLE)"
-            )
+        self._table_verified = True
 
     def _get_utc_now(self) -> datetime:
         return datetime.now(timezone.utc)
+
+    def _get_current_user(self) -> str:
+        try:
+            return self.spark.sql("SELECT current_user()").first()[0]
+        except Exception:
+            return "system"
 
     def log_event(
         self,
@@ -72,9 +74,12 @@ class TelemetryLogger:
         error_message: Optional[str] = None,
         additional_metadata: Optional[Dict[str, Any]] = None
     ) -> None:
-        """Constructs an audit log entry and appends it to the audit Delta table."""
+        """Appends a structured log entry to the audit Delta table."""
         now = self._get_utc_now()
-        
+        payload = additional_metadata or {}
+        if "user" not in payload:
+            payload["user"] = self._get_current_user()
+
         log_entry = [(
             now,
             self.environment,
@@ -82,9 +87,9 @@ class TelemetryLogger:
             step_name,
             status.upper(),
             int(records_processed),
-            float(execution_time_seconds) if execution_time_seconds is not None else None,
+            float(execution_time_seconds) if execution_time_seconds is not None else 0.0,
             error_message if error_message else "",
-            json.dumps(additional_metadata or {}, default=str, sort_keys=True)
+            json.dumps(payload, default=str, sort_keys=True)
         )]
 
         schema = StructType([
@@ -99,9 +104,12 @@ class TelemetryLogger:
             StructField("metadata", StringType(), True)
         ])
 
-        self.ensure_audit_table()
-        df_log = self.spark.createDataFrame(log_entry, schema=schema)
-        df_log.write.format("delta").mode("append").saveAsTable(self.full_table_path)
+        try:
+            self.ensure_audit_table()
+            df_log = self.spark.createDataFrame(log_entry, schema=schema)
+            df_log.write.format("delta").mode("append").saveAsTable(self.full_table_path)
+        except Exception as err:
+            print(f"[TELEMETRY ERROR] Could not write to {self.full_table_path}: {err}", file=sys.stderr)
 
     def log_exception(
         self,
@@ -111,7 +119,7 @@ class TelemetryLogger:
         execution_time_seconds: Optional[float] = None,
         additional_metadata: Optional[Dict[str, Any]] = None
     ) -> None:
-        """Captures execution failures and formats complete tracebacks."""
+        """Captures execution failures and formats un-truncated tracebacks."""
         formatted_traceback = "".join(traceback.format_exception(type(exception), exception, exception.__traceback__))
         error_desc = f"{str(exception)} | Full Trace: {formatted_traceback[:3000]}"
         

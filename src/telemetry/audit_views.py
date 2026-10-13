@@ -3,10 +3,7 @@ from src.utils.config_loader import ConfigLoader
 
 
 class AuditViewsManager:
-    """
-    Manages creation and deployment of diagnostic SQL views on top of audit_logs
-    for real-time pipeline monitoring, exception tracing, and data quality metrics.
-    """
+    """Manages diagnostic SQL views on top of audit_logs."""
 
     def __init__(self, spark: SparkSession, config_loader: ConfigLoader):
         self.spark = spark
@@ -16,7 +13,7 @@ class AuditViewsManager:
         self.audit_table = f"{self.catalog}.{self.audit_schema}.audit_logs"
 
     def deploy_health_summary_view(self) -> None:
-        """Deploys a view aggregating job executions, row mutations, and success rates."""
+        """Deploys a view aggregating finalized executions and accurate success percentages."""
         view_name = f"{self.catalog}.{self.audit_schema}.vw_pipeline_health_summary"
         
         sql_query = f"""
@@ -25,13 +22,15 @@ class AuditViewsManager:
             environment,
             pipeline_name,
             step_name,
-            COUNT(*) AS total_executions,
-            SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END) AS successful_runs,
+            COUNT(*) AS total_log_entries,
+            SUM(CASE WHEN status IN ('SUCCESS', 'COMPLETED') THEN 1 ELSE 0 END) AS successful_runs,
             SUM(CASE WHEN status = 'FAILED' THEN 1 ELSE 0 END) AS failed_runs,
             ROUND(
-                (SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 2
+                (SUM(CASE WHEN status IN ('SUCCESS', 'COMPLETED') THEN 1 ELSE 0 END) * 100.0) / 
+                NULLIF(SUM(CASE WHEN status IN ('SUCCESS', 'COMPLETED', 'FAILED') THEN 1 ELSE 0 END), 0), 2
             ) AS success_rate_pct,
             SUM(records_processed) AS total_records_processed,
+            ROUND(AVG(execution_time_seconds), 2) AS avg_duration_seconds,
             MAX(timestamp) AS last_execution_utc
         FROM {self.audit_table}
         GROUP BY environment, pipeline_name, step_name;
@@ -50,6 +49,7 @@ class AuditViewsManager:
             pipeline_name,
             step_name,
             error_message,
+            get_json_object(metadata, '$.user') AS user_id,
             metadata
         FROM {self.audit_table}
         WHERE status = 'FAILED'

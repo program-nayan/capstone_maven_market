@@ -4,10 +4,10 @@ from typing import Callable, Any
 from pyspark.sql import DataFrame
 from src.telemetry.logger import TelemetryLogger
 
-def log_execution(pipeline_name: str, step_name: str):
+def log_execution(pipeline_name: str, step_name: str, capture_row_count: bool = False):
     """
     Decorator for PySpark transformation functions.
-    Handles streaming DataFrames safely without triggering invalid .count() actions.
+    Dynamically identifies environment and protects against streaming crashes.
     """
     def decorator(func: Callable[..., Any]):
         @functools.wraps(func)
@@ -23,28 +23,30 @@ def log_execution(pipeline_name: str, step_name: str):
                         break
 
             if not spark:
-                # If no SparkSession is supplied, run the target function without logging
                 return func(*args, **kwargs)
 
-            logger = TelemetryLogger(spark=spark)
+            # Auto-detect environment from Spark runtime conf
+            env = spark.conf.get("bundle.environment", "dev")
+            catalog = spark.conf.get("catalog_name", "maven_market_uc")
+            logger = TelemetryLogger(spark=spark, catalog=catalog, environment=env)
+
+            start_time = time.perf_counter()
             logger.log_event(
                 pipeline_name=pipeline_name,
                 step_name=step_name,
                 status="STARTED",
                 records_processed=0
             )
-            start_time = time.perf_counter()
 
             try:
                 result = func(*args, **kwargs)
                 
                 records_count = 0
-                if isinstance(result, DataFrame):
-                    # Safely skip .count() on streaming DataFrames to prevent AnalysisException
+                if capture_row_count and isinstance(result, DataFrame):
                     if not result.isStreaming:
                         records_count = result.count()
                     else:
-                        records_count = -1  # Indicates streaming query
+                        records_count = -1
 
                 execution_time_sec = round(time.perf_counter() - start_time, 4)
                 
