@@ -11,7 +11,7 @@ if repo_root not in sys.path:
 # COMMAND ----------
 
 import dlt
-from pyspark.sql.functions import col, from_json, schema_of_json, current_timestamp, to_date
+from pyspark.sql.functions import col, from_json, schema_of_json, current_timestamp, to_date, to_timestamp, coalesce
 from src.utils.dlt_loader import load_config
 
 # Load runtime parameters
