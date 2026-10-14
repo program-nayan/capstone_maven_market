@@ -89,6 +89,7 @@ class FakeDLT(ModuleType):
         self.read_stream = MagicMock()
         self.create_streaming_table = MagicMock()
         self.apply_changes = MagicMock()
+        self.apply_changes_from_snapshot = MagicMock()
 
     def table(self, **metadata):
         def register(function):
@@ -115,13 +116,17 @@ def load_dlt_notebook(monkeypatch, filename, config=None):
         "from_json",
         "schema_of_json",
         "to_date",
+        "to_timestamp",
         "sum",
         "count",
         "avg",
         "max",
         "current_timestamp",
         "input_file_name",
-        "lit"
+        "lit",
+        "concat",
+        "coalesce",
+        "date_format"
     )
     for function_name in function_names:
         setattr(

@@ -81,7 +81,6 @@ resources:
   jobs:
     lakehouse_daily_workflow:
       name: ${bundle.name}_daily_job_${var.env}
-      
       # Top-level resource tags (moved from cluster custom_tags)
       tags:
         project: maven_market
@@ -101,6 +100,7 @@ resources:
         - task_key: run_medallion_dlt
           pipeline_task:
             pipeline_id: ${resources.pipelines.dlt_medallion_pipeline.id}
+          max_retries: 0
 
         # Task 2: Audit & Telemetry Log Aggregation (Serverless)
         - task_key: run_telemetry_audit
@@ -117,6 +117,7 @@ resources:
               - ${var.catalog_name}
               - "--environment"
               - ${var.env}
+          max_retries: 0
 
 # Code sync configuration (files excluded from deployment)
 sync:

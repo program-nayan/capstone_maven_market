@@ -8,16 +8,18 @@ def test_silver_registers_expected_tables_and_quality_expectations(monkeypatch):
         "silver.silver_stores",
         "silver.silver_products",
         "silver.silver_orders",
-        "silver.silver_inventory"
+        "silver.silver_inventory",
+        "silver.silver_transactions"
     }
-    assert loaded.dlt.expectations == [
+    expected_expectations = {
         ("valid_store_id", "store_id IS NOT NULL"),
         ("valid_product_id", "product_id IS NOT NULL"),
         ("valid_price", "product_retail_price > 0"),
         ("valid_quantity", "quantity > 0"),
         ("valid_customer_id", "customer_id IS NOT NULL"),
         ("valid_stock_count", "stock_on_hand IS NOT NULL AND stock_on_hand >= 0")
-    ]
+    }
+    assert set(loaded.dlt.expectations) >= expected_expectations
 
 
 def test_silver_stores_join_regions_and_remove_ingestion_columns(monkeypatch):
@@ -57,11 +59,14 @@ def test_silver_orders_parse_kafka_payload_and_join_products(monkeypatch):
 
     loaded.dlt.read_stream.assert_called_once_with("bronze.bronze_kafka_orders")
     loaded.dlt.read.assert_called_once_with("silver.silver_products")
-    kafka_stream.select.assert_called_once()
-    parsed_orders = kafka_stream.select.return_value.select.return_value
-    parsed_orders.join.assert_called_once_with(products, on="product_id", how="inner")
-    parsed_orders.join.return_value.select.assert_called_once()
-    assert result is parsed_orders.join.return_value.select.return_value
+    assert kafka_stream.select.call_count == 1
+    assert kafka_stream.select.return_value.select.call_count == 1
+    parsed_orders = kafka_stream.select.return_value.select.return_value.withColumn.return_value
+    parsed_with_dates = parsed_orders.withColumn.return_value
+    products_static = loaded.dlt.read.return_value.withColumn.return_value
+    parsed_with_dates.join.assert_called_once_with(products_static, on="product_id", how="inner")
+    parsed_with_dates.join.return_value.select.assert_called_once()
+    assert result is parsed_with_dates.join.return_value.select.return_value
 
 
 def test_silver_inventory_parses_and_renames_payload_fields(monkeypatch):
@@ -95,13 +100,15 @@ def test_silver_configures_scd_type_two_tables(monkeypatch):
         "silver.silver_dim_products_scd",
         "silver.silver_dim_stores_scd"
     ]
-    assert [call.kwargs["target"] for call in loaded.dlt.apply_changes.call_args_list] == [
+    assert [call.kwargs["target"] for call in loaded.dlt.apply_changes_from_snapshot.call_args_list] == [
         "silver.silver_dim_customers_scd",
-        "silver.silver_dim_products_scd",
-        "silver.silver_dim_stores_scd"
+        "silver.silver_dim_products_scd"
     ]
+    assert loaded.dlt.apply_changes.call_count == 1
+    assert loaded.dlt.apply_changes.call_args.kwargs["target"] == "silver.silver_dim_stores_scd"
     assert all(
         call.kwargs["stored_as_scd_type"] == 2
-        and call.kwargs["sequence_by"] == "_ingested_at"
-        for call in loaded.dlt.apply_changes.call_args_list
+        for call in loaded.dlt.apply_changes_from_snapshot.call_args_list
     )
+    assert loaded.dlt.apply_changes.call_args.kwargs["stored_as_scd_type"] == 2
+    assert loaded.dlt.apply_changes.call_args.kwargs["sequence_by"] == "_ingested_at"

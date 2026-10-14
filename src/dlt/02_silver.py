@@ -11,7 +11,7 @@ if repo_root not in sys.path:
 # COMMAND ----------
 
 import dlt
-from pyspark.sql.functions import col, from_json, schema_of_json, current_timestamp, to_date, to_timestamp, coalesce
+from pyspark.sql.functions import col, from_json, schema_of_json, current_timestamp, to_date, to_timestamp, coalesce, concat, lit, date_format
 from src.utils.dlt_loader import load_config
 
 # Load runtime parameters
@@ -177,7 +177,7 @@ def silver_inventory():
 )
 
 @dlt.expect_or_drop("valid_quantity", expectations["orders"]["valid_quantity"])
-@dlt.expect_or_drop("valid_product_id", expectations["orders"]["valid_product_id"])
+@dlt.expect_or_drop("valid_product_id", expectations["products"]["valid_product_id"])
 def silver_transactions():
     # 1. Read streaming transactions from Bronze Auto Loader
     transactions_stream = dlt.read_stream(f"{bronze_schema}.bronze_transactions")
@@ -190,7 +190,7 @@ def silver_transactions():
         transactions_stream
         .select(
             # Generate a deterministic transaction ID if not present in CSV
-            coalesce(col("transaction_id"), concat(lit("TXN-"), col("customer_id"), lit("-"), col("product_id"), lit("-"), date_format(col("transaction_date"), "yyyyMMdd"))).alias("order_id"),
+            coalesce(concat(lit("TXN-"), col("customer_id"), lit("-"), col("product_id"), lit("-"), date_format(col("transaction_date"), "yyyyMMdd"))).alias("order_id"),
             col("customer_id").cast("string").alias("customer_id"),
             col("store_id").cast("string").alias("store_id"),
             col("product_id").cast("string").alias("product_id"),

@@ -24,13 +24,16 @@ def test_gold_fact_sales_aggregates_by_date_and_dimensions(monkeypatch):
 
     result = loaded.dlt.tables["gold.fact_sales"]["function"]()
 
-    loaded.dlt.read.assert_called_once_with("silver.silver_orders")
-    orders.groupBy.assert_called_once()
-    group_columns = orders.groupBy.call_args.args
+    assert [call.args for call in loaded.dlt.read.call_args_list] == [
+        ("silver.silver_transactions",),
+        ("silver.silver_orders",)
+    ]
+    assert orders.select.call_count == 2
+    group_columns = orders.select.return_value.unionByName.return_value.groupBy.call_args.args
     assert group_columns[:3] == ("store_id", "product_id", "customer_id")
     assert group_columns[3].name == "to_date(col(order_date)).alias(order_date)"
-    orders.groupBy.return_value.agg.assert_called_once()
-    assert result is orders.groupBy.return_value.agg.return_value
+    orders.select.return_value.unionByName.return_value.groupBy.return_value.agg.assert_called_once()
+    assert result is orders.select.return_value.unionByName.return_value.groupBy.return_value.agg.return_value
 
 
 def test_gold_fact_inventory_adds_low_stock_flag(monkeypatch):
