@@ -32,16 +32,26 @@ gold_schema = cfg["targets"]["schemas"]["gold"]
     table_properties={"quality": "gold"}
 )
 def fact_sales():
-    orders_df = dlt.read(f"{silver_schema}.silver_orders")
+    # 1. Cleaned historical POS transactions
+    pos_df = dlt.read(f"{silver_schema}.silver_transactions").select(
+        "order_id", "store_id", "product_id", "customer_id", "order_date", "quantity", "unit_price", "total_amount"
+    )
+    
+    # 2. Cleaned Kafka streaming orders
+    kafka_df = dlt.read(f"{silver_schema}.silver_orders").select(
+        "order_id", "store_id", "product_id", "customer_id", "order_date", "quantity", "unit_price", "total_amount"
+    )
+    
+    # 3. Union and aggregate to daily grain as expected by Dashboard 1 & 3
+    combined_orders = pos_df.unionByName(kafka_df)
     
     return (
-        orders_df
-        .withColumn("order_date", to_date(col("order_date")))
+        combined_orders
         .groupBy(
             "store_id",
             "product_id",
             "customer_id",
-            "order_date"
+            to_date(col("order_date")).alias("order_date")
         )
         .agg(
             _sum("total_amount").alias("daily_revenue"),

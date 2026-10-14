@@ -167,7 +167,64 @@ def silver_inventory():
     )
 
 # ------------------------------------------------------------------
-# 5. Customer Master SCD Type 2 History Tracking
+# 5. Cleansed POS Store Transactions 
+# ------------------------------------------------------------------
+
+@dlt.table(
+    name=f"{silver_schema}.silver_transactions",
+    comment="Cleansed POS store transactions joined with product catalog",
+    table_properties={"quality": "silver"}
+)
+
+@dlt.expect_or_drop("valid_quantity", expectations["orders"]["valid_quantity"])
+@dlt.expect_or_drop("valid_product_id", expectations["orders"]["valid_product_id"])
+def silver_transactions():
+    # 1. Read streaming transactions from Bronze Auto Loader
+    transactions_stream = dlt.read_stream(f"{bronze_schema}.bronze_transactions")
+    
+    # 2. Read static product data for pricing lookup
+    products_static = dlt.read(f"{silver_schema}.silver_products")
+    
+    # 3. Standardize column names and types to match silver_orders schema
+    cleaned_transactions = (
+        transactions_stream
+        .select(
+            # Generate a deterministic transaction ID if not present in CSV
+            coalesce(col("transaction_id"), concat(lit("TXN-"), col("customer_id"), lit("-"), col("product_id"), lit("-"), date_format(col("transaction_date"), "yyyyMMdd"))).alias("order_id"),
+            col("customer_id").cast("string").alias("customer_id"),
+            col("store_id").cast("string").alias("store_id"),
+            col("product_id").cast("string").alias("product_id"),
+            col("transaction_date").cast("timestamp").alias("order_date"),
+            col("stock_date").cast("string").alias("stock_date"),
+            col("quantity").cast("int").alias("quantity"),
+            lit("POS_STORE").alias("order_channel"),
+            col("_ingested_at")
+        )
+    )
+    
+    # 4. Join with products to retrieve unit price and compute total amount
+    return (
+        cleaned_transactions
+        .join(products_static, on="product_id", how="left")
+        .select(
+            cleaned_transactions["order_id"],
+            cleaned_transactions["customer_id"],
+            cleaned_transactions["store_id"],
+            cleaned_transactions["product_id"],
+            cleaned_transactions["order_date"],
+            cleaned_transactions["stock_date"],
+            cleaned_transactions["quantity"],
+            products_static["product_retail_price"].alias("unit_price"),
+            (cleaned_transactions["quantity"] * coalesce(products_static["product_retail_price"], lit(0.0))).alias("total_amount"),
+            cleaned_transactions["order_channel"],
+            products_static["product_name"],
+            products_static["product_brand"],
+            cleaned_transactions["_ingested_at"]
+        )
+    )
+
+# ------------------------------------------------------------------
+# 6. Customer Master SCD Type 2 History Tracking
 # ------------------------------------------------------------------
 
 dlt.create_streaming_table(
@@ -185,7 +242,7 @@ dlt.apply_changes_from_snapshot(
 )
 
 # ------------------------------------------------------------------
-# 6. Product Catalog SCD Type 2 History Tracking
+# 7. Product Catalog SCD Type 2 History Tracking
 # ------------------------------------------------------------------
 
 dlt.create_streaming_table(
@@ -207,7 +264,7 @@ dlt.apply_changes_from_snapshot(
 )
 
 # ------------------------------------------------------------------
-# 7. Store Master SCD Type 2 History Tracking
+# 8. Store Master SCD Type 2 History Tracking
 # ------------------------------------------------------------------
 dlt.create_streaming_table(
     name=f"{silver_schema}.silver_dim_stores_scd",
