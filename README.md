@@ -67,22 +67,73 @@ Traditional Role-Based Access Control (RBAC) was replaced with **Attribute-Based
 ```text
 capstone_maven_market/
 ├── .github/workflows/
-│   └── deploy.yml              # CI/CD Workflow automation script
+│   └── deploy.yml
 ├── config/
-│   └── config.yml              # Config-driven pipeline parameters
+│   └── config.yml
+├── docs/
+│   └── architecture_blueprint.md
+├── notebooks/
+│   ├── 01_telemetry_Test_Harness.py
+│   ├── 02_dlt_telemetry_harness.py
+│   └── 03_pipeline_observability_sink.py
+├── sql_queries/
+│   ├── 1.1 High level profit margins.dbquery.ipynb
+│   ├── 1.2 YoY Revenue growth trend.dbquery.ipynb
+│   ├── 1.3 Category performance breakdown.dbquery.ipynb
+│   ├── 2.1 Kafka order streaming velocity.dbquery.ipynb
+│   ├── 2.2 Active low inventory alerts.dbquery.ipynb
+│   ├── 2.3 Hourly ingestion stream metrics.dbquery.ipynb
+│   ├── 3.1 Regional store sales.dbquery.ipynb
+│   ├── 3.2 Top performing stores in region.dbquery.ipynb
+│   ├── 3.3 User context verification.dbquery.ipynb
+│   ├── 4.1 Pipeline run status and success rates.dbquery.ipynb
+│   ├── 4.2 Active error traceback log.dbquery.ipynb
+│   ├── 4.3 Volume ingestion timeline.dbquery.ipynb
+│   └── audit logs creation.dbquery.ipynb
 ├── src/
+│   ├── __init__.py
 │   ├── dlt/
-│   │   ├── 01_bronze.py        # Ingestion layer (Auto Loader, PyMongo, Kafka)
-│   │   ├── 02_silver.py        # Cleansing, stream joins, SCD Type 2
-│   │   └── 03_gold.py          # Star Schema (Fact & Dimension tables)
-│   ├── security/
-│   │   └── abac_governance.sql # Governed Tags, CLS Masking, RLS Row Filters
-│   └── telemetry/
-│       └── logger.py           # Custom structured logging and audit sync
+│   │   ├── 01_bronze.py
+│   │   ├── 02_silver.py
+│   │   ├── 03_gold.py
+│   │   └── __init__.py
+│   ├── generators/
+│   │   ├── external_benchmarks_producer.ipynb
+│   │   └── kafka_producer.py
+│   ├── ingestion/
+│   │   ├── batch_ingestion.ipynb
+│   │   ├── batch_ingestion.py
+│   │   ├── kafka_stream.py
+│   │   ├── mongodb_ingestion.py
+│   │   └── requirements.txt
+│   ├── telemetry/
+│   │   ├── audit_views.py
+│   │   ├── benchmarks.py
+│   │   ├── decorators.py
+│   │   ├── dlt_listener.py
+│   │   ├── logger.py
+│   │   ├── run_audit.py
+│   │   └── __init__.py
+│   └── utils/
+│       ├── __init__.py
+│       ├── config_loader.py
+│       └── dlt_loader.py
 ├── tests/
-│   └── test_config.py          # Pytest unit tests for configurations
-├── databricks.yml              # Master DABs declarative IaC specification
-└── requirements.txt            # Python dependencies
+│   ├── dlt_test_utils.py
+│   ├── __init__.py
+│   ├── test_audit_views.py
+│   ├── test_config.py
+│   ├── test_decorators.py
+│   ├── test_dlt_bronze.py
+│   ├── test_dlt_gold.py
+│   ├── test_dlt_listener.py
+│   ├── test_dlt_silver.py
+│   ├── test_telemetry.py
+│   └── test.ipynb
+├── .gitignore
+├── databricks.yml
+├── flake8
+└── requirements.txt
 ```
 
 ---
