@@ -7,8 +7,8 @@ dlt:
   pipeline_id: "7b2cf906-43b5-4563-ac2f-0d54fcfda519" # Replace with your DLT Pipeline ID
 
 storage:
-  base_path: "abfss://root@stmavenmarket1.dfs.core.windows.net"
-  checkpoint_base: "abfss://root@stmavenmarket1.dfs.core.windows.net/_checkpoints"
+  base_path: "abfss://root@samavenmarket.dfs.core.windows.net"
+  checkpoint_base: "abfss://root@samavenmarket.dfs.core.windows.net/_checkpoints"
 
 sources:
   pos_csv:

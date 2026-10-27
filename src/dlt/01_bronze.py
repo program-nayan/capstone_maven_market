@@ -65,7 +65,7 @@ db_name = mongo_cfg["database"]
 mongo_secret_key = mongo_cfg.get("uri_secret_key", "mongodb-connection-uri")
 
 # Retrieve MongoDB connection string securely from Azure Key Vault
-mongo_uri = dbutils.secrets.get(scope=secret_scope, key=mongo_secret_key).strip()
+mongo_uri = dbutils.secrets.get(scope="scope-maven-market", key=mongo_secret_key).strip()
 
 for entity_name, collection_name in mongo_cfg["collections"].items():
     dlt_tbl_name = f"bronze_mongodb_{entity_name}"
