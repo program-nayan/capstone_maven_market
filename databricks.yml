@@ -35,7 +35,7 @@ targets:
   prod:
     mode: production
     workspace:
-      host: ${var.prod_workspace_host}
+      host: https://adb-7405616504834617.17.azuredatabricks.net
       root_path: /Shared/.bundle/${bundle.name}/${bundle.target}
     variables:
       env: prod
